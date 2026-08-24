@@ -46,15 +46,22 @@ class MobileTimetableApp {
    * Register offline Service Worker
    */
   registerServiceWorker() {
-    if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
-      navigator.serviceWorker.register('./sw.js').catch((err) => {
-        console.warn('ServiceWorker registration error:', err);
-      });
+    if ('serviceWorker' in navigator) {
+      const isLocalOrSecure = window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      if (isLocalOrSecure) {
+        navigator.serviceWorker.register('./sw.js', { scope: './' })
+          .then((reg) => {
+            console.log('[PWA] Service Worker registered:', reg.scope);
+          })
+          .catch((err) => {
+            console.warn('[PWA] Service Worker registration failed:', err);
+          });
+      }
     }
   }
 
   /**
-   * Capture PWA install prompt
+   * Capture PWA install prompt & appinstalled events
    */
   setupPWAInstall() {
     window.addEventListener('beforeinstallprompt', (e) => {
@@ -64,10 +71,20 @@ class MobileTimetableApp {
       if (installBtn) installBtn.classList.remove('hidden');
     });
 
+    window.addEventListener('appinstalled', () => {
+      this.state.deferredInstallPrompt = null;
+      const installBtn = document.getElementById('drawer-pwa-install-btn');
+      if (installBtn) installBtn.classList.add('hidden');
+      this.showToast('App installed to Home Screen!', 'success');
+    });
+
     document.getElementById('drawer-pwa-install-btn')?.addEventListener('click', async () => {
       if (this.state.deferredInstallPrompt) {
         this.state.deferredInstallPrompt.prompt();
-        const { outcome } = await this.state.deferredInstallPrompt.userChoice;
+        const choice = await this.state.deferredInstallPrompt.userChoice;
+        if (choice && choice.outcome === 'accepted') {
+          this.showToast('Installing to Home Screen...', 'success');
+        }
         this.state.deferredInstallPrompt = null;
       } else {
         this.showToast('To add to Home Screen: tap your browser menu (⋮) and choose "Add to Home screen"');

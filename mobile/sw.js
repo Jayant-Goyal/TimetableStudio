@@ -7,6 +7,10 @@ const CACHE_NAME = 'ttstudio-mobile-v2';
 const CORE_ASSETS = [
   './index.html',
   './manifest.json',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
+  './icons/icon-maskable-192.png',
+  './icons/icon-maskable-512.png',
   './js/mobile-app.js',
   '../css/styles.css',
   '../js/samples.js',
