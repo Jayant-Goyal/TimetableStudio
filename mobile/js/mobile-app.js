@@ -10,6 +10,7 @@ class MobileTimetableApp {
       grid: null,
       themeId: localStorage.getItem('ttstudio_mobile_theme') || 'cyberpunk-neon',
       orientation: localStorage.getItem('ttstudio_mobile_orientation') || 'periods-in-rows',
+      viewMode: 'fill', // 'fill' (default pannable) or 'fit' (whole screen)
       attendance: this.loadAttendanceState(),
       spotlightSubject: null,
       activeModalClass: null,
@@ -44,7 +45,7 @@ class MobileTimetableApp {
    * Register offline Service Worker
    */
   registerServiceWorker() {
-    if ('serviceWorker' in navigator) {
+    if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
       navigator.serviceWorker.register('./sw.js').catch((err) => {
         console.warn('ServiceWorker registration error:', err);
       });
@@ -88,6 +89,7 @@ class MobileTimetableApp {
           this.setTimetableData(parsed.t);
           if (parsed.d?.th) this.state.themeId = parsed.d.th;
           if (parsed.d?.o) this.state.orientation = parsed.d.o;
+          if (parsed.att) this.mergeAttendance(parsed.att);
           this.saveCurrentTimetable();
           return true;
         }
@@ -199,6 +201,20 @@ class MobileTimetableApp {
       attModal?.classList.remove('flex');
     });
 
+    // Attendance Backup, Restore & CSV triggers
+    document.getElementById('att-backup-btn')?.addEventListener('click', () => {
+      this.downloadAttendanceBackup();
+    });
+
+    document.getElementById('att-restore-file-input')?.addEventListener('change', (e) => {
+      const file = e.target.files?.[0];
+      if (file) this.restoreAttendanceFromFile(file);
+    });
+
+    document.getElementById('att-export-csv-btn')?.addEventListener('click', () => {
+      this.downloadAttendanceCSV();
+    });
+
     // Insights modal
     const insModal = document.getElementById('insights-modal');
     document.getElementById('drawer-insights-btn')?.addEventListener('click', () => {
@@ -258,6 +274,39 @@ class MobileTimetableApp {
    * Setup global event listeners
    */
   setupEventListeners() {
+    // View Mode Toggle (Fit / Fill)
+    const toggleViewMode = () => {
+      this.toggleViewMode();
+    };
+
+    document.getElementById('view-mode-toggle-btn')?.addEventListener('click', toggleViewMode);
+    document.getElementById('drawer-viewmode-btn')?.addEventListener('click', () => {
+      this.toggleViewMode();
+      document.getElementById('drawer-close-btn')?.click();
+    });
+
+    // Resize listener for Fit mode adjustment
+    window.addEventListener('resize', () => {
+      if (this.state.viewMode === 'fit') {
+        this.applyViewMode();
+      }
+    });
+
+    // Double tap on empty stage canvas toggles Fit/Fill
+    const stage = document.getElementById('mobile-fullscreen-stage');
+    let stageLastTap = 0;
+    stage?.addEventListener('click', (e) => {
+      if (e.target === stage || e.target.id === 'mobile-timetable-container') {
+        const now = Date.now();
+        if (now - stageLastTap < 300 && now - stageLastTap > 0) {
+          stageLastTap = 0;
+          this.toggleViewMode();
+        } else {
+          stageLastTap = now;
+        }
+      }
+    });
+
     // Quick flip & drawer flip
     const toggleOrientation = () => {
       this.state.orientation = this.state.orientation === 'periods-in-rows' ? 'periods-in-columns' : 'periods-in-rows';
@@ -289,8 +338,10 @@ class MobileTimetableApp {
             this.setTimetableData(parsed.timetable);
             if (parsed.displaySettings?.themeId) this.applyTheme(parsed.displaySettings.themeId);
             if (parsed.displaySettings?.orientation) this.state.orientation = parsed.displaySettings.orientation;
+            if (parsed.attendance) this.mergeAttendance(parsed.attendance);
           } else if (parsed.university || parsed.schedule) {
             this.setTimetableData(parsed);
+            if (parsed.attendance) this.mergeAttendance(parsed.attendance);
           } else {
             throw new Error('Unrecognized timetable structure');
           }
@@ -313,10 +364,66 @@ class MobileTimetableApp {
       const cleanName = (this.state.parsedData.university || 'Timetable').replace(/[^a-z0-9_-]/gi, '_');
       window.TimetableExporter.exportBundle(this.state.parsedData, {
         themeId: this.state.themeId,
-        orientation: this.state.orientation
+        orientation: this.state.orientation,
+        attendance: this.state.attendance
       }, cleanName);
-      this.showToast('Downloaded .ttstudio package!', 'success');
+      this.showToast('Downloaded .ttstudio package with attendance!', 'success');
     });
+  }
+
+  /**
+   * Toggle View Mode (Fill vs Fit)
+   */
+  toggleViewMode() {
+    this.state.viewMode = this.state.viewMode === 'fill' ? 'fit' : 'fill';
+    this.applyViewMode();
+    this.showToast(this.state.viewMode === 'fit' ? 'Fit to Screen' : 'Fill View (Full Scale)');
+  }
+
+  /**
+   * Apply View Mode Scaling & Geometry
+   */
+  applyViewMode() {
+    const container = document.getElementById('mobile-timetable-container');
+    const stage = document.getElementById('mobile-fullscreen-stage');
+    if (!container || !stage) return;
+
+    const poster = container.querySelector('.timetable-poster');
+    const modeIcon = document.getElementById('view-mode-icon');
+    const modeText = document.getElementById('view-mode-text');
+    const drawerModeText = document.getElementById('drawer-viewmode-text');
+
+    if (this.state.viewMode === 'fit') {
+      const stageW = window.innerWidth;
+      const stageH = window.innerHeight;
+      const posterW = 1400;
+      const posterH = poster ? poster.offsetHeight : 880;
+
+      const scaleX = (stageW - 20) / posterW;
+      const scaleY = (stageH - 20) / posterH;
+      const fitScale = Math.min(scaleX, scaleY, 0.95);
+
+      container.style.transform = `scale(${fitScale})`;
+      container.style.transformOrigin = 'top center';
+      container.style.margin = '0 auto';
+
+      if (modeIcon) modeIcon.setAttribute('data-lucide', 'maximize-2');
+      if (modeText) modeText.textContent = 'Fill';
+      if (drawerModeText) drawerModeText.textContent = 'Fit View (Whole Screen)';
+
+      stage.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
+    } else {
+      // 'fill' view (100% full crisp geometry)
+      container.style.transform = 'scale(1)';
+      container.style.transformOrigin = 'top center';
+      container.style.margin = 'auto';
+
+      if (modeIcon) modeIcon.setAttribute('data-lucide', 'minimize-2');
+      if (modeText) modeText.textContent = 'Fit';
+      if (drawerModeText) drawerModeText.textContent = 'Fill View (Full Scale)';
+    }
+
+    if (window.lucide) lucide.createIcons();
   }
 
   /**
@@ -343,7 +450,10 @@ class MobileTimetableApp {
       canvasMargin: 'poster'
     }, false);
 
-    // Attach interactive card clicks
+    // Apply View Mode scaling
+    this.applyViewMode();
+
+    // Attach interactive card taps (with double-tap detection)
     this.attachCardInteractivity();
 
     // Reapply spotlight if active
@@ -354,6 +464,7 @@ class MobileTimetableApp {
 
   /**
    * Attach click / tap listener on every class card
+   * Waits after single tap to detect double-tap before triggering tile action
    */
   attachCardInteractivity() {
     const container = document.getElementById('mobile-timetable-container');
@@ -364,11 +475,71 @@ class MobileTimetableApp {
       const subjectText = card.querySelector('.class-subject-text')?.textContent?.trim();
       if (!subjectText) return;
 
+      let tapTimer = null;
+      let lastTapTime = 0;
+      const DOUBLE_TAP_DELAY = 280; // wait 280ms before activating single-tap tile action
+
       card.addEventListener('click', (e) => {
         e.stopPropagation();
-        this.openCardModal(subjectText, card);
+        const currentTime = Date.now();
+        const timeDiff = currentTime - lastTapTime;
+
+        if (timeDiff < DOUBLE_TAP_DELAY && timeDiff > 0) {
+          // DOUBLE TAP DETECTED: Cancel single tap tile action & trigger zoom!
+          if (tapTimer) {
+            clearTimeout(tapTimer);
+            tapTimer = null;
+          }
+          lastTapTime = 0;
+          this.handleCardDoubleTap(card);
+        } else {
+          // Potential SINGLE TAP: Wait for possible second tap
+          lastTapTime = currentTime;
+          if (tapTimer) clearTimeout(tapTimer);
+
+          tapTimer = setTimeout(() => {
+            tapTimer = null;
+            lastTapTime = 0;
+            // Activate Tile Action
+            this.openCardModal(subjectText, card);
+          }, DOUBLE_TAP_DELAY);
+        }
       });
     });
+  }
+
+  /**
+   * Handle Double-Tap on a specific card
+   */
+  handleCardDoubleTap(card) {
+    const stage = document.getElementById('mobile-fullscreen-stage');
+    
+    if (this.state.viewMode === 'fit') {
+      // Zoom into Fill view and scroll to this card
+      this.state.viewMode = 'fill';
+      this.applyViewMode();
+
+      setTimeout(() => {
+        if (stage && card) {
+          const cardRect = card.getBoundingClientRect();
+          const stageRect = stage.getBoundingClientRect();
+          const targetLeft = stage.scrollLeft + (cardRect.left - stageRect.left) - (stageRect.width / 2) + (cardRect.width / 2);
+          const targetTop = stage.scrollTop + (cardRect.top - stageRect.top) - (stageRect.height / 2) + (cardRect.height / 2);
+
+          stage.scrollTo({
+            left: Math.max(0, targetLeft),
+            top: Math.max(0, targetTop),
+            behavior: 'smooth'
+          });
+        }
+      }, 100);
+      this.showToast('Zoomed in (Double Tap)');
+    } else {
+      // If already in Fill mode, double-tap toggles back to Fit view
+      this.state.viewMode = 'fit';
+      this.applyViewMode();
+      this.showToast('Zoomed out to Fit (Double Tap)');
+    }
   }
 
   /**
@@ -529,7 +700,7 @@ class MobileTimetableApp {
   }
 
   // =========================================================================
-  // ATTENDANCE MODAL
+  // ATTENDANCE STORAGE & BACKUP ENGINE (PERMANENT RETENTION)
   // =========================================================================
 
   loadAttendanceState() {
@@ -537,14 +708,48 @@ class MobileTimetableApp {
       const saved = localStorage.getItem('ttstudio_attendance');
       return saved ? JSON.parse(saved) : {};
     } catch (e) {
+      console.warn('Failed to read attendance from localStorage:', e);
       return {};
     }
   }
 
   saveAttendanceState() {
-    localStorage.setItem('ttstudio_attendance', JSON.stringify(this.state.attendance));
+    try {
+      localStorage.setItem('ttstudio_attendance', JSON.stringify(this.state.attendance));
+      // Redundant backup snapshot in localStorage
+      localStorage.setItem('ttstudio_attendance_backup', JSON.stringify({
+        updatedAt: new Date().toISOString(),
+        data: this.state.attendance
+      }));
+    } catch (e) {
+      console.warn('Could not save attendance to localStorage:', e);
+    }
   }
 
+  /**
+   * Intelligently merge attendance records (prevents loss on timetable changes)
+   */
+  mergeAttendance(importedAttendance) {
+    if (!importedAttendance || typeof importedAttendance !== 'object') return;
+    
+    Object.entries(importedAttendance).forEach(([subj, record]) => {
+      if (!record || typeof record !== 'object') return;
+      const current = this.state.attendance[subj] || { attended: 0, total: 0 };
+      
+      this.state.attendance[subj] = {
+        attended: Math.max(current.attended || 0, record.attended || 0),
+        total: Math.max(current.total || 0, record.total || 0)
+      };
+    });
+
+    this.saveAttendanceState();
+    this.renderAttendanceModal();
+    this.updateCardModalAttendanceDisplay();
+  }
+
+  /**
+   * Mark attendance increment
+   */
   markAttendance(subject, isAttended) {
     if (!this.state.attendance[subject]) {
       this.state.attendance[subject] = { attended: 0, total: 0 };
@@ -556,17 +761,137 @@ class MobileTimetableApp {
     }
 
     this.saveAttendanceState();
-    this.showToast(`Attendance recorded for ${subject}!`, 'success');
+    this.showToast(`Attendance updated for ${subject}!`, 'success');
+  }
+
+  /**
+   * Edit attendance counts directly
+   */
+  editAttendanceCounts(subject) {
+    const current = this.state.attendance[subject] || { attended: 0, total: 0 };
+    const newAtt = prompt(`Enter number of classes attended for "${subject}":`, current.attended);
+    if (newAtt === null) return;
+    
+    const newTot = prompt(`Enter total classes conducted for "${subject}":`, current.total);
+    if (newTot === null) return;
+
+    const parsedAtt = parseInt(newAtt, 10);
+    const parsedTot = parseInt(newTot, 10);
+
+    if (isNaN(parsedAtt) || isNaN(parsedTot) || parsedAtt < 0 || parsedTot < 0 || parsedAtt > parsedTot) {
+      alert('Invalid numbers. Attended classes must be a positive number and cannot exceed total conducted classes.');
+      return;
+    }
+
+    this.state.attendance[subject] = { attended: parsedAtt, total: parsedTot };
+    this.saveAttendanceState();
+    this.renderAttendanceModal();
+    this.updateCardModalAttendanceDisplay();
+    this.showToast(`Updated "${subject}" counts!`, 'success');
+  }
+
+  /**
+   * 1-Click Download Attendance Backup (.json)
+   */
+  downloadAttendanceBackup() {
+    const backup = {
+      app: 'Timetable Studio Attendance Backup',
+      exportedAt: new Date().toISOString(),
+      university: this.state.parsedData?.university || 'University',
+      attendance: this.state.attendance
+    };
+
+    const jsonStr = JSON.stringify(backup, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const filename = `attendance_backup_${new Date().toISOString().slice(0, 10)}.json`;
+
+    const link = document.createElement('a');
+    link.download = filename;
+    link.href = URL.createObjectURL(blob);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(link.href);
+
+    this.showToast(`Downloaded ${filename}!`, 'success');
+  }
+
+  /**
+   * Restore Attendance from Backup File
+   */
+  restoreAttendanceFromFile(file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const parsed = JSON.parse(e.target.result);
+        const importedData = parsed.attendance || (parsed.format === 'TTStudioBundle' ? parsed.attendance : parsed);
+        
+        if (importedData && typeof importedData === 'object') {
+          this.mergeAttendance(importedData);
+          this.showToast(`Restored attendance from ${file.name}!`, 'success');
+        } else {
+          throw new Error('No valid attendance structure found in file.');
+        }
+      } catch (err) {
+        this.showToast(`Restore failed: ${err.message}`, 'error');
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  /**
+   * Export Attendance Spreadsheet (.csv)
+   */
+  downloadAttendanceCSV() {
+    const subjects = Object.keys(this.calculateInsights().subjectHours);
+    let csv = 'Subject,Attended Classes,Total Conducted,Attendance %,Status,Recommendation\n';
+
+    subjects.forEach(subj => {
+      const att = this.state.attendance[subj] || { attended: 0, total: 0 };
+      const pct = att.total > 0 ? Math.round((att.attended / att.total) * 100) : 100;
+      const isSafe = pct >= 75;
+      
+      let note = 'No classes logged';
+      if (att.total > 0) {
+        if (isSafe) {
+          const safeSkips = Math.floor((att.attended - 0.75 * att.total) / 0.75);
+          note = safeSkips > 0 ? `Can miss ${safeSkips} more` : 'At 75% threshold';
+        } else {
+          const needed = Math.ceil((0.75 * att.total - att.attended) / 0.25);
+          note = `Attend ${needed} consecutive`;
+        }
+      }
+
+      csv += `"${subj}",${att.attended},${att.total},${pct}%,${isSafe ? 'SAFE' : 'SHORTAGE'},"${note}"\n`;
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const filename = `attendance_report_${new Date().toISOString().slice(0, 10)}.csv`;
+
+    const link = document.createElement('a');
+    link.download = filename;
+    link.href = URL.createObjectURL(blob);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(link.href);
+
+    this.showToast(`Exported ${filename}!`, 'success');
   }
 
   renderAttendanceModal() {
     const list = document.getElementById('attendance-modal-list');
     if (!list || !this.state.parsedData) return;
 
-    const subjects = Object.keys(this.calculateInsights().subjectHours);
+    // Combine subjects from current schedule + any previously tracked subjects in attendance storage
+    const scheduleSubjects = Object.keys(this.calculateInsights().subjectHours);
+    const trackedSubjects = Object.keys(this.state.attendance);
+    const allSubjects = Array.from(new Set([...scheduleSubjects, ...trackedSubjects]));
+
     let html = '';
 
-    subjects.forEach(subj => {
+    allSubjects.forEach(subj => {
       const att = this.state.attendance[subj] || { attended: 0, total: 0 };
       const pct = att.total > 0 ? Math.round((att.attended / att.total) * 100) : 100;
       const isSafe = pct >= 75;
@@ -588,7 +913,10 @@ class MobileTimetableApp {
         <div class="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 space-y-2.5 text-xs">
           <div class="flex items-center justify-between">
             <div>
-              <h4 class="font-black text-white text-sm">${subj}</h4>
+              <div class="flex items-center gap-1.5">
+                <h4 class="font-black text-white text-sm">${subj}</h4>
+                <button class="modal-att-edit text-slate-400 hover:text-blue-400 text-[10px] p-0.5" data-subject="${subj}" title="Edit counts manually">✏️</button>
+              </div>
               <div class="text-slate-400 font-mono text-[11px]">${att.attended} / ${att.total} Conducted</div>
             </div>
             <span class="text-base font-black ${isSafe ? 'text-emerald-400' : 'text-rose-400'}">${pct}%</span>
@@ -622,6 +950,11 @@ class MobileTimetableApp {
       b.addEventListener('click', () => {
         this.markAttendance(b.dataset.subject, false);
         this.renderAttendanceModal();
+      });
+    });
+    list.querySelectorAll('.modal-att-edit').forEach(b => {
+      b.addEventListener('click', () => {
+        this.editAttendanceCounts(b.dataset.subject);
       });
     });
   }

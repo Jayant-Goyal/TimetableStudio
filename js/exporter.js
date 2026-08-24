@@ -200,7 +200,8 @@ class TimetableExporter {
       metadata: {
         appName: 'Timetable Studio',
         customTitle: filename || 'Timetable Bundle'
-      }
+      },
+      attendance: options.attendance || (typeof localStorage !== 'undefined' ? JSON.parse(localStorage.getItem('ttstudio_attendance') || '{}') : {})
     };
 
     const jsonStr = JSON.stringify(bundle, null, 2);
@@ -231,7 +232,8 @@ class TimetableExporter {
           isBundle: true,
           timetable: bundle.timetable,
           displaySettings: bundle.displaySettings || {},
-          metadata: bundle.metadata || {}
+          metadata: bundle.metadata || {},
+          attendance: bundle.attendance || null
         };
       }
 
@@ -241,7 +243,8 @@ class TimetableExporter {
           isBundle: false,
           timetable: bundle,
           displaySettings: {},
-          metadata: {}
+          metadata: {},
+          attendance: bundle.attendance || null
         };
       }
 
