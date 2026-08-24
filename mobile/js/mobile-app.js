@@ -832,37 +832,43 @@ class MobileTimetableApp {
    */
   renderThemeGallery() {
     const container = document.getElementById('drawer-theme-gallery');
-    if (!container) return;
+    if (!container || !window.THEMES) return;
 
     let html = '';
     window.THEMES.forEach(t => {
       const isActive = t.id === this.state.themeId;
       html += `
-        <div 
-          class="theme-card-drawer p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
-            isActive ? 'bg-blue-950/40 border-blue-500 shadow-sm ring-1 ring-blue-500/40' : 'bg-slate-900 border-slate-800 hover:border-slate-700'
+        <button 
+          type="button"
+          class="theme-card-drawer w-full text-left p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between active:scale-98 ${
+            isActive ? 'bg-blue-950/60 border-blue-500 shadow-md ring-1 ring-blue-500/50' : 'bg-slate-900 border-slate-800 hover:border-slate-700'
           }"
           data-theme-id="${t.id}"
         >
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2 pointer-events-none">
             <div class="flex gap-0.5">
-              ${t.preview.map(c => `<span class="w-3 h-3 rounded-full border border-black/20" style="background: ${c};"></span>`).join('')}
+              ${(t.preview || []).map(c => `<span class="w-3 h-3 rounded-full border border-black/20" style="background: ${c};"></span>`).join('')}
             </div>
             <div class="text-[11px] font-bold text-white">${t.name}</div>
           </div>
-          ${isActive ? '<span class="text-[10px] text-blue-400 font-bold">Active ✓</span>' : ''}
-        </div>
+          ${isActive ? '<span class="text-[10px] text-blue-400 font-bold pointer-events-none">Active ✓</span>' : ''}
+        </button>
       `;
     });
 
     container.innerHTML = html;
 
-    container.querySelectorAll('.theme-card-drawer').forEach(card => {
-      card.addEventListener('click', () => {
-        this.applyTheme(card.dataset.themeId);
-        this.renderTimetable();
-        this.renderThemeGallery();
-        this.showToast(`Theme: ${card.dataset.themeId}`);
+    container.querySelectorAll('.theme-card-drawer').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const themeId = btn.getAttribute('data-theme-id');
+        if (themeId) {
+          this.applyTheme(themeId);
+          this.renderTimetable();
+          this.renderThemeGallery();
+          const themeObj = window.THEMES?.find(x => x.id === themeId);
+          this.showToast(`Theme: ${themeObj?.name || themeId}`, 'success');
+        }
       });
     });
   }
