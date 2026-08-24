@@ -52,14 +52,20 @@
 
   <style>
     html, body {
-      width: 100%;
-      height: 100%;
+      width: 100vw;
+      height: 100vh;
+      height: 100dvh;
       margin: 0;
       padding: 0;
       overflow: hidden;
       background-color: #0b0f19;
       -webkit-tap-highlight-color: transparent;
       user-select: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
     }
 
     /* Hide scrollbars across all browsers while retaining smooth scroll */
@@ -75,6 +81,7 @@
     #mobile-fullscreen-stage {
       width: 100vw;
       height: 100vh;
+      height: 100dvh;
       margin: 0;
       padding: 0;
       box-sizing: border-box;
@@ -82,16 +89,27 @@
       position: relative;
     }
 
+    /* FIT MODE: Height-Fit View (Height matches 100% of display height, horizontal pan across days) */
     #mobile-fullscreen-stage.stage-mode-fit {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
+      display: block;
+      overflow-x: auto;
+      overflow-y: hidden;
+      -webkit-overflow-scrolling: touch;
       padding: 0;
       margin: 0;
     }
 
+    /* FILL MODE: 1:1 Scale Pannable View (Free pan in both directions) */
     #mobile-fullscreen-stage.stage-mode-fill {
+      display: block;
+      overflow: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 0;
+      margin: 0;
+    }
+
+    /* ZOOM MODE: Detail Close-up */
+    #mobile-fullscreen-stage.stage-mode-zoom {
       display: block;
       overflow: auto;
       -webkit-overflow-scrolling: touch;
@@ -367,6 +385,14 @@
         >
           <i data-lucide="smartphone" class="w-3.5 h-3.5 text-emerald-400"></i>
           <span>Add to Home Screen</span>
+        </button>
+
+        <button 
+          id="drawer-fullscreen-btn"
+          class="w-full py-2 px-3 rounded-xl bg-purple-950/60 border border-purple-500/30 text-purple-300 flex items-center justify-center gap-2 active:scale-98 transition-all text-[11px]"
+        >
+          <i data-lucide="scan" class="w-3.5 h-3.5 text-purple-400"></i>
+          <span>Immersive Notch Fullscreen</span>
         </button>
 
         <a 
