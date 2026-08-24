@@ -26,7 +26,7 @@ class TimetableRenderer {
 
     const {
       orientation = 'periods-in-rows', // 'periods-in-rows' | 'periods-in-columns'
-      theme,
+      theme = window.THEMES[0],
       showHeader = true,
       showLegend = true,
       showTimeLabels = true,
@@ -35,7 +35,8 @@ class TimetableRenderer {
       borderRadius = 'rounded', // 'square', 'slight', 'rounded', 'smooth'
       fontFamily = 'jakarta',
       showWatermark = true,
-      canvasMargin = 'poster'
+      canvasMargin = 'poster',
+      showFaculty = true
     } = options;
 
     const subjectColorMap = window.getSubjectColorMap(parsedData.schedule, parsedData.faculty, theme);
@@ -297,7 +298,7 @@ class TimetableRenderer {
           `;
 
           if (cell.type === 'class') {
-            html += TimetableRenderer.renderClassCard(cell, subjectColorMap, styles, highlightLabs, cardRadius, orientation, baseMinH);
+            html += TimetableRenderer.renderClassCard(cell, subjectColorMap, styles, highlightLabs, cardRadius, orientation, baseMinH, showFaculty);
           } else {
             html += TimetableRenderer.renderEmptyCell(styles);
           }
@@ -404,7 +405,7 @@ class TimetableRenderer {
           `;
 
           if (cell.type === 'class') {
-            html += TimetableRenderer.renderClassCard(cell, subjectColorMap, styles, highlightLabs, cardRadius, orientation, baseMinH);
+            html += TimetableRenderer.renderClassCard(cell, subjectColorMap, styles, highlightLabs, cardRadius, orientation, baseMinH, showFaculty);
           } else {
             html += TimetableRenderer.renderEmptyCell(styles);
           }
@@ -424,7 +425,7 @@ class TimetableRenderer {
     `;
 
     // 3. Faculty / Subject Legend Table
-    if (showLegend && parsedData.faculty && parsedData.faculty.length > 0) {
+    if (showLegend && showFaculty && parsedData.faculty && parsedData.faculty.length > 0) {
       html += `
         <div class="poster-legend-section">
           <div 
@@ -503,7 +504,7 @@ class TimetableRenderer {
   /**
    * Helper to render class cell card
    */
-  static renderClassCard(cell, subjectColorMap, styles, highlightLabs, cardRadius, orientation = 'periods-in-rows', baseMinH = 94) {
+  static renderClassCard(cell, subjectColorMap, styles, highlightLabs, cardRadius, orientation = 'periods-in-rows', baseMinH = 94, showFaculty = true) {
     const color = subjectColorMap[cell.subject] || { bg: '#f1f5f9', text: '#0f172a', border: '#cbd5e1' };
     const isLab = cell.isLab;
     const span = cell.span || 1;
@@ -566,7 +567,7 @@ class TimetableRenderer {
             </div>
           ` : ''}
 
-          ${cell.faculty ? `
+          ${(cell.faculty && showFaculty) ? `
             <div class="class-faculty-text" title="${cell.faculty}">
               ${SVG_ICONS.user}
               <span>${cell.faculty}</span>

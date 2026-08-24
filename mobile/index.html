@@ -71,21 +71,30 @@
     #mobile-fullscreen-stage {
       width: 100vw;
       height: 100vh;
-      overflow: auto;
-      -webkit-overflow-scrolling: touch;
-      display: flex;
-      align-items: flex-start;
-      justify-content: flex-start;
-      padding: 12px;
       box-sizing: border-box;
       touch-action: pan-x pan-y pinch-zoom;
+      position: relative;
+    }
+
+    #mobile-fullscreen-stage.stage-mode-fit {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      padding: 0;
+    }
+
+    #mobile-fullscreen-stage.stage-mode-fill {
+      display: block;
+      overflow: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 16px;
     }
 
     #mobile-timetable-container {
       width: 1400px;
       min-width: 1400px;
-      margin: auto;
-      transform-origin: top center;
+      margin: 0 auto;
       transition: transform 0.28s cubic-bezier(0.2, 0, 0, 1), opacity 0.2s ease;
     }
 
@@ -228,7 +237,22 @@
         </button>
       </div>
 
-      <!-- 2. Attendance Tracker Modal Trigger -->
+      <!-- 3. Faculty Details Visibility Toggle -->
+      <div class="space-y-1.5">
+        <label class="text-[10px] font-black uppercase tracking-wider text-slate-400">Faculty Details</label>
+        <button 
+          id="drawer-faculty-btn"
+          class="w-full py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 flex items-center justify-between text-slate-200 active:scale-98 transition-all"
+        >
+          <div class="flex items-center gap-2">
+            <i data-lucide="user-check" class="w-4 h-4 text-emerald-400" id="faculty-toggle-icon"></i>
+            <span id="drawer-faculty-text">Faculty: Visible</span>
+          </div>
+          <span class="text-[10px] font-mono text-slate-400" id="faculty-toggle-badge">Hide</span>
+        </button>
+      </div>
+
+      <!-- 4. Attendance Tracker Modal Trigger -->
       <div class="space-y-1.5">
         <label class="text-[10px] font-black uppercase tracking-wider text-slate-400">Attendance Manager</label>
         <button 

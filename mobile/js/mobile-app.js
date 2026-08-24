@@ -11,6 +11,7 @@ class MobileTimetableApp {
       themeId: localStorage.getItem('ttstudio_mobile_theme') || 'cyberpunk-neon',
       orientation: localStorage.getItem('ttstudio_mobile_orientation') || 'periods-in-rows',
       viewMode: 'fill', // 'fill' (default pannable) or 'fit' (whole screen)
+      showFaculty: localStorage.getItem('ttstudio_show_faculty') !== 'false',
       attendance: this.loadAttendanceState(),
       spotlightSubject: null,
       activeModalClass: null,
@@ -274,7 +275,7 @@ class MobileTimetableApp {
    * Setup global event listeners
    */
   setupEventListeners() {
-    // View Mode Toggle (Fit / Fill)
+    // 1. View Mode Toggle (Fit / Fill)
     const toggleViewMode = () => {
       this.toggleViewMode();
     };
@@ -285,29 +286,56 @@ class MobileTimetableApp {
       document.getElementById('drawer-close-btn')?.click();
     });
 
-    // Resize listener for Fit mode adjustment
+    // 2. Faculty Visibility Toggle
+    document.getElementById('drawer-faculty-btn')?.addEventListener('click', () => {
+      this.toggleFacultyVisibility();
+    });
+
+    // 3. Resize listener for Fit mode adjustment
     window.addEventListener('resize', () => {
       if (this.state.viewMode === 'fit') {
         this.applyViewMode();
       }
     });
 
-    // Double tap on empty stage canvas toggles Fit/Fill
+    // 4. Global Stage Click / Tap & Double-Tap Anywhere Listener
     const stage = document.getElementById('mobile-fullscreen-stage');
-    let stageLastTap = 0;
+    let stageLastTapTime = 0;
+    let stageSingleTapTimer = null;
+    const DOUBLE_TAP_DELAY = 280;
+
     stage?.addEventListener('click', (e) => {
-      if (e.target === stage || e.target.id === 'mobile-timetable-container') {
-        const now = Date.now();
-        if (now - stageLastTap < 300 && now - stageLastTap > 0) {
-          stageLastTap = 0;
-          this.toggleViewMode();
-        } else {
-          stageLastTap = now;
+      const now = Date.now();
+      const timeSinceLast = now - stageLastTapTime;
+      const card = e.target.closest('.class-card');
+
+      if (timeSinceLast < DOUBLE_TAP_DELAY && timeSinceLast > 0) {
+        // === DOUBLE TAP DETECTED ANYWHERE ===
+        stageLastTapTime = 0;
+        if (stageSingleTapTimer) {
+          clearTimeout(stageSingleTapTimer);
+          stageSingleTapTimer = null;
+        }
+        this.handleGlobalDoubleTap(e.clientX, e.clientY, card);
+      } else {
+        // === POTENTIAL SINGLE TAP ===
+        stageLastTapTime = now;
+        if (card) {
+          const subjectText = card.querySelector('.class-subject-text')?.textContent?.trim();
+          if (stageSingleTapTimer) clearTimeout(stageSingleTapTimer);
+
+          stageSingleTapTimer = setTimeout(() => {
+            stageSingleTapTimer = null;
+            stageLastTapTime = 0;
+            if (subjectText) {
+              this.openCardModal(subjectText, card);
+            }
+          }, DOUBLE_TAP_DELAY);
         }
       }
     });
 
-    // Quick flip & drawer flip
+    // 5. Quick flip & drawer flip
     const toggleOrientation = () => {
       this.state.orientation = this.state.orientation === 'periods-in-rows' ? 'periods-in-columns' : 'periods-in-rows';
       localStorage.setItem('ttstudio_mobile_orientation', this.state.orientation);
@@ -320,12 +348,12 @@ class MobileTimetableApp {
     document.getElementById('quick-flip-btn')?.addEventListener('click', toggleOrientation);
     document.getElementById('drawer-orient-btn')?.addEventListener('click', toggleOrientation);
 
-    // Save Image button
+    // 6. Save Image button
     document.getElementById('drawer-save-image-btn')?.addEventListener('click', async () => {
       await this.saveTimetableImage();
     });
 
-    // File import in drawer
+    // 7. File import in drawer
     document.getElementById('drawer-file-input')?.addEventListener('change', (e) => {
       const file = e.target.files?.[0];
       if (!file) return;
@@ -358,7 +386,7 @@ class MobileTimetableApp {
       reader.readAsText(file);
     });
 
-    // Export .ttstudio bundle
+    // 8. Export .ttstudio bundle
     document.getElementById('drawer-export-bundle-btn')?.addEventListener('click', () => {
       if (!this.state.parsedData) return;
       const cleanName = (this.state.parsedData.university || 'Timetable').replace(/[^a-z0-9_-]/gi, '_');
@@ -372,6 +400,34 @@ class MobileTimetableApp {
   }
 
   /**
+   * Toggle Faculty Visibility
+   */
+  toggleFacultyVisibility() {
+    this.state.showFaculty = !this.state.showFaculty;
+    localStorage.setItem('ttstudio_show_faculty', this.state.showFaculty);
+    this.updateFacultyDrawerUI();
+    this.renderTimetable();
+    this.showToast(this.state.showFaculty ? 'Faculty details: Visible' : 'Faculty details: Hidden');
+  }
+
+  /**
+   * Update Faculty Toggle Drawer UI
+   */
+  updateFacultyDrawerUI() {
+    const icon = document.getElementById('faculty-toggle-icon');
+    const text = document.getElementById('drawer-faculty-text');
+    const badge = document.getElementById('faculty-toggle-badge');
+
+    if (text) text.textContent = `Faculty: ${this.state.showFaculty ? 'Visible' : 'Hidden'}`;
+    if (badge) badge.textContent = this.state.showFaculty ? 'Hide' : 'Show';
+    if (icon) {
+      icon.setAttribute('data-lucide', this.state.showFaculty ? 'user-check' : 'user-x');
+      icon.className = `w-4 h-4 ${this.state.showFaculty ? 'text-emerald-400' : 'text-slate-400'}`;
+      if (window.lucide) lucide.createIcons();
+    }
+  }
+
+  /**
    * Toggle View Mode (Fill vs Fit)
    */
   toggleViewMode() {
@@ -381,7 +437,7 @@ class MobileTimetableApp {
   }
 
   /**
-   * Apply View Mode Scaling & Geometry
+   * Apply View Mode Scaling & Geometry (Centering in Middle of Screen)
    */
   applyViewMode() {
     const container = document.getElementById('mobile-timetable-container');
@@ -394,29 +450,34 @@ class MobileTimetableApp {
     const drawerModeText = document.getElementById('drawer-viewmode-text');
 
     if (this.state.viewMode === 'fit') {
+      // FIT MODE: Center in the dead middle of screen with zero overflow clipping
+      stage.className = 'stage-mode-fit hide-scrollbar';
+
       const stageW = window.innerWidth;
       const stageH = window.innerHeight;
       const posterW = 1400;
       const posterH = poster ? poster.offsetHeight : 880;
 
-      const scaleX = (stageW - 20) / posterW;
-      const scaleY = (stageH - 20) / posterH;
-      const fitScale = Math.min(scaleX, scaleY, 0.95);
+      const scaleX = (stageW - 32) / posterW;
+      const scaleY = (stageH - 32) / posterH;
+      const fitScale = Math.min(scaleX, scaleY, 0.98);
 
+      container.style.transformOrigin = 'center center';
       container.style.transform = `scale(${fitScale})`;
-      container.style.transformOrigin = 'top center';
       container.style.margin = '0 auto';
 
       if (modeIcon) modeIcon.setAttribute('data-lucide', 'maximize-2');
       if (modeText) modeText.textContent = 'Fill';
       if (drawerModeText) drawerModeText.textContent = 'Fit View (Whole Screen)';
 
-      stage.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
+      stage.scrollTo({ top: 0, left: 0 });
     } else {
-      // 'fill' view (100% full crisp geometry)
-      container.style.transform = 'scale(1)';
+      // FILL MODE: Full 1:1 crisp pannable geometry
+      stage.className = 'stage-mode-fill hide-scrollbar';
+
       container.style.transformOrigin = 'top center';
-      container.style.margin = 'auto';
+      container.style.transform = 'scale(1)';
+      container.style.margin = '20px auto';
 
       if (modeIcon) modeIcon.setAttribute('data-lucide', 'minimize-2');
       if (modeText) modeText.textContent = 'Fit';
@@ -447,14 +508,13 @@ class MobileTimetableApp {
       borderRadius: 'rounded',
       fontFamily: 'jakarta',
       showWatermark: true,
-      canvasMargin: 'poster'
+      canvasMargin: 'poster',
+      showFaculty: this.state.showFaculty
     }, false);
 
     // Apply View Mode scaling
     this.applyViewMode();
-
-    // Attach interactive card taps (with double-tap detection)
-    this.attachCardInteractivity();
+    this.updateFacultyDrawerUI();
 
     // Reapply spotlight if active
     if (this.state.spotlightSubject) {
@@ -463,64 +523,19 @@ class MobileTimetableApp {
   }
 
   /**
-   * Attach click / tap listener on every class card
-   * Waits after single tap to detect double-tap before triggering tile action
+   * Handle Double-Tap anywhere on the screen
    */
-  attachCardInteractivity() {
-    const container = document.getElementById('mobile-timetable-container');
-    if (!container || !this.state.grid) return;
-
-    const cards = container.querySelectorAll('.class-card');
-    cards.forEach(card => {
-      const subjectText = card.querySelector('.class-subject-text')?.textContent?.trim();
-      if (!subjectText) return;
-
-      let tapTimer = null;
-      let lastTapTime = 0;
-      const DOUBLE_TAP_DELAY = 280; // wait 280ms before activating single-tap tile action
-
-      card.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const currentTime = Date.now();
-        const timeDiff = currentTime - lastTapTime;
-
-        if (timeDiff < DOUBLE_TAP_DELAY && timeDiff > 0) {
-          // DOUBLE TAP DETECTED: Cancel single tap tile action & trigger zoom!
-          if (tapTimer) {
-            clearTimeout(tapTimer);
-            tapTimer = null;
-          }
-          lastTapTime = 0;
-          this.handleCardDoubleTap(card);
-        } else {
-          // Potential SINGLE TAP: Wait for possible second tap
-          lastTapTime = currentTime;
-          if (tapTimer) clearTimeout(tapTimer);
-
-          tapTimer = setTimeout(() => {
-            tapTimer = null;
-            lastTapTime = 0;
-            // Activate Tile Action
-            this.openCardModal(subjectText, card);
-          }, DOUBLE_TAP_DELAY);
-        }
-      });
-    });
-  }
-
-  /**
-   * Handle Double-Tap on a specific card
-   */
-  handleCardDoubleTap(card) {
+  handleGlobalDoubleTap(clientX, clientY, card) {
     const stage = document.getElementById('mobile-fullscreen-stage');
     
     if (this.state.viewMode === 'fit') {
-      // Zoom into Fill view and scroll to this card
+      // Zoom into Fill view and scroll to tapped location / card
       this.state.viewMode = 'fill';
       this.applyViewMode();
 
       setTimeout(() => {
-        if (stage && card) {
+        if (!stage) return;
+        if (card) {
           const cardRect = card.getBoundingClientRect();
           const stageRect = stage.getBoundingClientRect();
           const targetLeft = stage.scrollLeft + (cardRect.left - stageRect.left) - (stageRect.width / 2) + (cardRect.width / 2);
@@ -531,14 +546,25 @@ class MobileTimetableApp {
             top: Math.max(0, targetTop),
             behavior: 'smooth'
           });
+        } else {
+          const stageRect = stage.getBoundingClientRect();
+          const targetLeft = stage.scrollLeft + (clientX - stageRect.left) * 1.5 - (stageRect.width / 2);
+          const targetTop = stage.scrollTop + (clientY - stageRect.top) * 1.5 - (stageRect.height / 2);
+
+          stage.scrollTo({
+            left: Math.max(0, targetLeft),
+            top: Math.max(0, targetTop),
+            behavior: 'smooth'
+          });
         }
-      }, 100);
+      }, 80);
+
       this.showToast('Zoomed in (Double Tap)');
     } else {
       // If already in Fill mode, double-tap toggles back to Fit view
       this.state.viewMode = 'fit';
       this.applyViewMode();
-      this.showToast('Zoomed out to Fit (Double Tap)');
+      this.showToast('Fit to Screen (Double Tap)');
     }
   }
 
