@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Timetable Studio — Beautiful Timetable JSON to JPEG Exporter</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eff6ff',
+              100: '#dbeafe',
+              500: '#3b82f6',
+              600: '#2563eb',
+              700: '#1d4ed8',
+              800: '#1e40af',
+              900: '#1e3a8a',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Export Engines: html-to-image & html2canvas -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html-to-image/1.11.11/html-to-image.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+  <!-- Google Fonts Direct Links (Inlined for Canvas & SVG capture) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&family=Outfit:wght@400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,600;0,700;0,900;1,600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Custom Stylesheet -->
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="bg-slate-950 text-slate-100 flex flex-col h-screen overflow-hidden antialiased select-none">
+
+  <!-- ================= TOP NAVIGATION BAR ================= -->
+  <header class="glass-panel border-b px-4 sm:px-6 py-3 flex items-center justify-between z-30 shrink-0">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-blue-500/20">
+        <i data-lucide="calendar-days" class="w-5 h-5 text-white"></i>
+      </div>
+      <div>
+        <h1 class="font-extrabold text-base tracking-tight flex items-center gap-2">
+          <span>Timetable Studio</span>
+          <span class="text-[10px] font-bold px-2 py-0.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-full">JPEG Export</span>
+        </h1>
+        <p class="text-xs text-slate-400 font-medium">JSON to High-Res Image Generator</p>
+      </div>
+    </div>
+
+    <!-- Center Quick Switchers (Desktop) -->
+    <div class="hidden lg:flex items-center gap-2 bg-slate-900/90 p-1 rounded-xl border border-slate-800">
+      <span class="text-xs font-semibold text-slate-400 px-2">Layout:</span>
+      <button 
+        id="quick-orient-rows-btn"
+        class="px-3 py-1 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 bg-blue-600 text-white shadow-sm"
+        title="Periods in Rows (Days as Columns)"
+      >
+        <i data-lucide="rows" class="w-3.5 h-3.5"></i>
+        <span>Periods in Rows</span>
+      </button>
+      <button 
+        id="quick-orient-cols-btn"
+        class="px-3 py-1 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 text-slate-400 hover:text-slate-200"
+        title="Periods in Columns (Days as Rows)"
+      >
+        <i data-lucide="columns" class="w-3.5 h-3.5"></i>
+        <span>Periods in Columns</span>
+      </button>
+    </div>
+
+    <!-- Right Actions -->
+    <div class="flex items-center gap-2">
+      <!-- Resolution Multiplier -->
+      <div class="hidden sm:flex items-center gap-1.5 bg-slate-900/90 px-2.5 py-1 rounded-xl border border-slate-800 text-xs">
+        <span class="text-slate-400 font-medium">Scale:</span>
+        <select id="export-scale-select" class="bg-transparent text-slate-200 font-bold focus:outline-hidden cursor-pointer">
+          <option value="1" class="bg-slate-900">1x (Web Standard)</option>
+          <option value="2" selected class="bg-slate-900">2x (Retina HD - 200%)</option>
+          <option value="3" class="bg-slate-900">3x (Ultra-HD - 300%)</option>
+          <option value="4" class="bg-slate-900">4x (4K Ultra-Sharp - 400%)</option>
+          <option value="5" class="bg-slate-900">5x (Master Print 600 DPI - 500%)</option>
+        </select>
+      </div>
+
+      <!-- Copy to Clipboard Button -->
+      <button 
+        id="copy-image-btn"
+        class="hidden sm:flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl border border-slate-700 transition-all active:scale-95 shadow-sm"
+        title="Copy Image to Clipboard"
+      >
+        <i data-lucide="copy" class="w-4 h-4 text-blue-400"></i>
+        <span>Copy Image</span>
+      </button>
+
+      <!-- Download PNG Button -->
+      <button 
+        id="download-png-btn"
+        class="hidden md:flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl border border-slate-700 transition-all active:scale-95 shadow-sm"
+        title="Download high-resolution PNG"
+      >
+        <i data-lucide="image" class="w-4 h-4 text-emerald-400"></i>
+        <span>PNG</span>
+      </button>
+
+      <!-- Open Android / Mobile WebApp -->
+      <a 
+        id="open-mobile-app-btn"
+        href="mobile/index.html" 
+        target="_blank"
+        class="hidden lg:flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl shadow-sm transition-all active:scale-95"
+        title="Open Android Mobile Companion WebApp (Install to Homescreen)"
+      >
+        <i data-lucide="smartphone" class="w-4 h-4"></i>
+        <span>Mobile App</span>
+      </a>
+
+      <!-- Primary Action: Download JPEG Button -->
+      <button 
+        id="download-jpeg-btn"
+        class="flex items-center gap-2 px-4 py-2 text-xs font-extrabold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl shadow-lg shadow-blue-600/30 transition-all active:scale-95"
+        title="Download high-resolution JPEG"
+      >
+        <i data-lucide="download" class="w-4 h-4" id="download-icon"></i>
+        <span id="download-btn-text">Export JPEG</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ================= MAIN WORKSPACE ================= -->
+  <div class="flex-1 flex overflow-hidden">
+    
+    <!-- LEFT CONTROLS SIDEBAR -->
+    <aside class="w-80 sm:w-96 glass-panel border-r flex flex-col shrink-0 z-20 overflow-hidden">
+      
+      <!-- Tab Navigation -->
+      <div class="flex border-b border-slate-800 bg-slate-900/50 p-1.5 gap-1 shrink-0">
+        <button 
+          id="tab-btn-themes" 
+          class="sidebar-tab active flex-1 py-2 px-2 text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-all bg-blue-600/10 text-blue-400 border border-blue-500/20"
+        >
+          <i data-lucide="palette" class="w-3.5 h-3.5"></i>
+          <span>Theme & Style</span>
+        </button>
+        <button 
+          id="tab-btn-json" 
+          class="sidebar-tab flex-1 py-2 px-2 text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-all text-slate-400 hover:text-slate-200"
+        >
+          <i data-lucide="file-json" class="w-3.5 h-3.5"></i>
+          <span>JSON Data</span>
+        </button>
+        <button 
+          id="tab-btn-export" 
+          class="sidebar-tab flex-1 py-2 px-2 text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-all text-slate-400 hover:text-slate-200"
+        >
+          <i data-lucide="settings-2" class="w-3.5 h-3.5"></i>
+          <span>Export Options</span>
+        </button>
+      </div>
+
+      <!-- Tab Content Area (Scrollable) -->
+      <div class="flex-1 overflow-y-auto p-4 space-y-5 select-text">
+
+        <!-- ================= TAB 1: THEMES & LAYOUT ================= -->
+        <div id="tab-content-themes" class="tab-pane space-y-5">
+          
+          <!-- Layout Orientation Switcher -->
+          <div class="space-y-2">
+            <label class="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center justify-between">
+              <span>Grid Layout Orientation</span>
+              <span class="text-[11px] font-semibold text-blue-400">Essential Option</span>
+            </label>
+            <div class="grid grid-cols-2 gap-2">
+              <button 
+                id="orient-rows-btn"
+                class="orient-btn active p-3 rounded-xl border text-left flex flex-col gap-1 transition-all bg-blue-600/10 border-blue-500 text-slate-100"
+              >
+                <div class="flex items-center justify-between">
+                  <i data-lucide="rows" class="w-4 h-4 text-blue-400"></i>
+                  <span class="w-2 h-2 rounded-full bg-blue-500"></span>
+                </div>
+                <div class="text-xs font-bold">Periods in Rows</div>
+                <div class="text-[10px] text-slate-400">Days along columns (Requested)</div>
+              </button>
+
+              <button 
+                id="orient-cols-btn"
+                class="orient-btn p-3 rounded-xl border border-slate-800 text-left flex flex-col gap-1 transition-all hover:border-slate-700 text-slate-300"
+              >
+                <div class="flex items-center justify-between">
+                  <i data-lucide="columns" class="w-4 h-4 text-slate-400"></i>
+                  <span class="w-2 h-2 rounded-full bg-transparent"></span>
+                </div>
+                <div class="text-xs font-bold">Periods in Columns</div>
+                <div class="text-[10px] text-slate-400">Days along rows (Standard)</div>
+              </button>
+            </div>
+          </div>
+
+          <!-- Themes Gallery -->
+          <div class="space-y-2">
+            <label class="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center justify-between">
+              <span>Curated Themes</span>
+              <span id="active-theme-name" class="text-[11px] font-semibold text-blue-400">Modern Slate</span>
+            </label>
+            <div id="theme-gallery-grid" class="grid grid-cols-1 gap-2.5">
+              <!-- Dynamically populated from JS -->
+            </div>
+          </div>
+
+          <!-- Typography Selector -->
+          <div class="space-y-2">
+            <label class="text-xs font-black uppercase tracking-wider text-slate-400">Typography Font</label>
+            <select id="font-family-select" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs font-bold text-slate-200 focus:border-blue-500 focus:outline-hidden">
+              <option value="jakarta">Plus Jakarta Sans (Modern & Clean)</option>
+              <option value="inter">Inter (Minimalist & Neutral)</option>
+              <option value="outfit">Outfit (Geometric & Friendly)</option>
+              <option value="space">Space Grotesk (Tech & Dynamic)</option>
+              <option value="playfair">Playfair Display (Academic Serif)</option>
+              <option value="mono">JetBrains Mono (Developer Monospace)</option>
+            </select>
+          </div>
+
+          <!-- Visual Toggles -->
+          <div class="space-y-2.5 bg-slate-900/60 p-3.5 rounded-xl border border-slate-800/80">
+            <label class="text-xs font-black uppercase tracking-wider text-slate-400">Elements & Display</label>
+            
+            <label class="flex items-center justify-between text-xs font-semibold cursor-pointer">
+              <span class="text-slate-300">Show Header Banner</span>
+              <input type="checkbox" id="toggle-show-header" checked class="w-4 h-4 accent-blue-600 rounded cursor-pointer">
+            </label>
+
+            <label class="flex items-center justify-between text-xs font-semibold cursor-pointer">
+              <span class="text-slate-300">Show Faculty Directory Legend</span>
+              <input type="checkbox" id="toggle-show-legend" checked class="w-4 h-4 accent-blue-600 rounded cursor-pointer">
+            </label>
+
+            <label class="flex items-center justify-between text-xs font-semibold cursor-pointer">
+              <span class="text-slate-300">Show Time Slot Timings</span>
+              <input type="checkbox" id="toggle-show-time" checked class="w-4 h-4 accent-blue-600 rounded cursor-pointer">
+            </label>
+
+            <label class="flex items-center justify-between text-xs font-semibold cursor-pointer">
+              <span class="text-slate-300">Highlight Lab Sessions</span>
+              <input type="checkbox" id="toggle-highlight-labs" checked class="w-4 h-4 accent-blue-600 rounded cursor-pointer">
+            </label>
+
+            <label class="flex items-center justify-between text-xs font-semibold cursor-pointer">
+              <span class="text-slate-300">Show Footer & Timestamp</span>
+              <input type="checkbox" id="toggle-show-watermark" checked class="w-4 h-4 accent-blue-600 rounded cursor-pointer">
+            </label>
+          </div>
+
+          <!-- Density & Corner Radius -->
+          <div class="grid grid-cols-2 gap-3">
+            <div class="space-y-1.5">
+              <label class="text-xs font-bold text-slate-400">Cell Padding</label>
+              <select id="cell-padding-select" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-200">
+                <option value="compact">Compact</option>
+                <option value="normal" selected>Normal</option>
+                <option value="roomy">Roomy</option>
+              </select>
+            </div>
+
+            <div class="space-y-1.5">
+              <label class="text-xs font-bold text-slate-400">Corner Radius</label>
+              <select id="border-radius-select" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-200">
+                <option value="square">Square</option>
+                <option value="slight">Slight (6px)</option>
+                <option value="rounded" selected>Rounded (12px)</option>
+                <option value="smooth">Smooth (16px)</option>
+              </select>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- ================= TAB 2: JSON DATA EDITOR ================= -->
+        <div id="tab-content-json" class="tab-pane hidden space-y-4">
+          
+          <!-- Sample Loaders -->
+          <div class="space-y-2">
+            <label class="text-xs font-black uppercase tracking-wider text-slate-400">Quick Sample Presets</label>
+            <div class="grid grid-cols-2 gap-2">
+              <button 
+                id="load-sample-jecrc-btn" 
+                class="px-2.5 py-2 text-xs font-bold bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-blue-400 flex items-center justify-center gap-1.5 transition-all"
+              >
+                <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+                <span>Reset to JECRC</span>
+              </button>
+              <button 
+                id="load-sample-tech-btn" 
+                class="px-2.5 py-2 text-xs font-bold bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-slate-300 flex items-center justify-center gap-1.5 transition-all"
+              >
+                <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+                <span>Load Sample 2</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- File Upload & Prettify -->
+          <div class="flex items-center gap-2">
+            <label class="flex-1 px-3 py-1.5 text-xs font-bold bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-slate-300 flex items-center justify-center gap-1.5 cursor-pointer transition-all">
+              <i data-lucide="folder-open" class="w-3.5 h-3.5 text-blue-400"></i>
+              <span>Import .ttstudio / JSON</span>
+              <input type="file" id="json-file-input" accept=".ttstudio,.json,application/json" class="hidden">
+            </label>
+
+            <button 
+              id="format-json-btn" 
+              class="px-3 py-1.5 text-xs font-bold bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-slate-300 flex items-center gap-1.5 transition-all"
+              title="Prettify JSON"
+            >
+              <i data-lucide="code" class="w-3.5 h-3.5 text-emerald-400"></i>
+              <span>Format</span>
+            </button>
+          </div>
+
+          <!-- JSON Error Alert (Hidden by default) -->
+          <div id="json-error-box" class="hidden p-3 rounded-xl bg-red-950/60 border border-red-800/80 text-red-300 text-xs font-medium space-y-1">
+            <div class="flex items-center gap-1.5 font-bold text-red-400">
+              <i data-lucide="alert-triangle" class="w-4 h-4"></i>
+              <span>Invalid JSON Data</span>
+            </div>
+            <div id="json-error-msg" class="text-[11px] font-mono whitespace-pre-wrap"></div>
+          </div>
+
+          <!-- Realtime JSON Textarea -->
+          <div class="space-y-1.5">
+            <div class="flex items-center justify-between text-xs text-slate-400 font-semibold">
+              <span>Edit Timetable JSON</span>
+              <span id="json-status-indicator" class="text-emerald-400 flex items-center gap-1 text-[11px]">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Valid
+              </span>
+            </div>
+            <textarea 
+              id="json-editor-textarea" 
+              rows="16"
+              class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 font-mono text-xs text-slate-200 focus:outline-hidden focus:border-blue-500 transition-all resize-y leading-relaxed"
+              placeholder="Paste your timetable JSON here..."
+              spellcheck="false"
+            ></textarea>
+          </div>
+
+        </div>
+
+        <!-- ================= TAB 3: EXPORT OPTIONS ================= -->
+        <div id="tab-content-export" class="tab-pane hidden space-y-4">
+          
+          <div class="space-y-2">
+            <label class="text-xs font-black uppercase tracking-wider text-slate-400">Custom Filename</label>
+            <div class="relative">
+              <input 
+                type="text" 
+                id="export-filename-input" 
+                placeholder="JECRC_DF_Timetable"
+                class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-200 focus:outline-hidden focus:border-blue-500"
+              >
+            </div>
+          </div>
+
+          <div class="space-y-2">
+            <label class="text-xs font-black uppercase tracking-wider text-slate-400">Export Resolution / Scale</label>
+            <select id="export-tab-scale-select" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs font-bold text-slate-200">
+              <option value="1">1x (Web Standard - 1560px)</option>
+              <option value="2" selected>2x (Retina HD - 3120px)</option>
+              <option value="3">3x (Ultra-HD 300 DPI - 4680px)</option>
+              <option value="4">4x (4K Ultra-Sharp - 6240px)</option>
+              <option value="5">5x (Master Print 600 DPI - 7800px)</option>
+            </select>
+          </div>
+
+          <div class="space-y-2">
+            <label class="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center justify-between">
+              <span>JPEG Quality</span>
+              <span id="quality-val-display" class="text-blue-400 text-xs font-bold">95%</span>
+            </label>
+            <input 
+              type="range" 
+              id="jpeg-quality-slider" 
+              min="0.80" 
+              max="1.0" 
+              step="0.02" 
+              value="0.95"
+              class="w-full accent-blue-600 cursor-pointer"
+            >
+            <p class="text-[11px] text-slate-500">Higher quality generates crisp, uncompressed images for printing or sharing.</p>
+          </div>
+
+          <div class="space-y-2">
+            <label class="text-xs font-black uppercase tracking-wider text-slate-400">Canvas Outer Margin</label>
+            <select id="canvas-margin-select" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs font-bold text-slate-200">
+              <option value="none">None (Full Bleed)</option>
+              <option value="compact">Compact (16px)</option>
+              <option value="poster" selected>Poster Frame with Padding & Shadow (32px)</option>
+            </select>
+          </div>
+
+          <div class="pt-2 space-y-2">
+            <button 
+              id="export-tab-jpeg-btn" 
+              class="w-full py-2.5 text-xs font-extrabold bg-blue-600 hover:bg-blue-500 text-white rounded-xl shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 transition-all active:scale-98"
+            >
+              <i data-lucide="download" class="w-4 h-4"></i>
+              <span>Download High-Res JPEG</span>
+            </button>
+
+            <button 
+              id="export-tab-png-btn" 
+              class="w-full py-2.5 text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-98"
+            >
+              <i data-lucide="image" class="w-4 h-4 text-emerald-400"></i>
+              <span>Download Lossless PNG</span>
+            </button>
+
+            <button 
+              id="export-tab-copy-btn" 
+              class="w-full py-2.5 text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-98"
+            >
+              <i data-lucide="copy" class="w-4 h-4 text-blue-400"></i>
+              <span>Copy Image to Clipboard</span>
+            </button>
+          </div>
+
+          <!-- Proprietary Package Bundle Export (.ttstudio) -->
+          <div class="pt-2 border-t border-slate-800 space-y-2">
+            <div class="p-3 rounded-xl bg-indigo-950/40 border border-indigo-500/20 space-y-2.5">
+              <div class="flex items-center gap-2">
+                <span class="p-1 rounded-md bg-indigo-500/20 text-indigo-400">
+                  <i data-lucide="package" class="w-4 h-4"></i>
+                </span>
+                <div>
+                  <div class="text-xs font-extrabold text-slate-200">Proprietary .ttstudio Bundle</div>
+                  <div class="text-[10px] text-slate-400 leading-tight">Stores schedule data, theme, layout & display settings</div>
+                </div>
+              </div>
+              <button 
+                id="export-bundle-btn" 
+                class="w-full py-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg shadow-sm flex items-center justify-center gap-2 transition-all active:scale-98"
+                title="Download .ttstudio package bundle"
+              >
+                <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                <span>Download .ttstudio Bundle</span>
+              </button>
+            </div>
+
+            <a 
+              id="export-tab-mobile-btn"
+              href="mobile/index.html" 
+              target="_blank"
+              class="w-full py-2.5 text-xs font-extrabold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl shadow-md flex items-center justify-center gap-2 transition-all active:scale-98"
+            >
+              <i data-lucide="smartphone" class="w-4 h-4"></i>
+              <span>Open in Android Mobile WebApp</span>
+            </a>
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- Sidebar Footer Stats -->
+      <div class="p-3 border-t border-slate-800/80 bg-slate-950/80 flex items-center justify-between text-[11px] text-slate-400 font-medium shrink-0">
+        <span id="stats-summary-text">6 Days • 6 Slots • 13 Classes</span>
+        <span class="text-slate-500 font-mono">v1.0</span>
+      </div>
+    </aside>
+
+    <!-- RIGHT MAIN PREVIEW STAGE -->
+    <main class="flex-1 flex flex-col overflow-hidden relative">
+      
+      <!-- Stage Toolbar -->
+      <div class="bg-slate-900/90 border-b border-slate-800/80 px-4 py-2 flex items-center justify-between text-xs z-10 shrink-0">
+        <div class="flex items-center gap-3">
+          <span class="font-bold text-slate-300 flex items-center gap-1.5">
+            <i data-lucide="eye" class="w-3.5 h-3.5 text-blue-400"></i>
+            <span>Live Output Preview</span>
+          </span>
+          <span id="stage-layout-badge" class="px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 font-mono text-[10px] border border-slate-700">
+            Periods in Rows (6x6)
+          </span>
+        </div>
+
+        <!-- Zoom Controls -->
+        <div class="flex items-center gap-1.5">
+          <button id="zoom-out-btn" class="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-all" title="Zoom Out">
+            <i data-lucide="zoom-out" class="w-4 h-4"></i>
+          </button>
+          <span id="zoom-display" class="font-mono text-xs text-slate-300 px-1 font-bold w-12 text-center">100%</span>
+          <button id="zoom-in-btn" class="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-all" title="Zoom In">
+            <i data-lucide="zoom-in" class="w-4 h-4"></i>
+          </button>
+          <button id="zoom-reset-btn" class="px-2 py-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-slate-200 text-xs font-semibold transition-all">
+            Fit
+          </button>
+        </div>
+      </div>
+
+      <!-- Stage Canvas (Scrollable) -->
+      <div id="preview-stage-container" class="flex-1 overflow-auto preview-stage-bg p-4 sm:p-8 flex items-start justify-center">
+        <!-- Dynamic Timetable Poster Injected Here -->
+        <div id="timetable-render-target" class="transition-all duration-300 origin-top max-w-full"></div>
+      </div>
+
+    </main>
+
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container"></div>
+
+  <!-- Application Scripts (Pure HTML5 & JavaScript - Zero Server Required) -->
+  <script src="js/samples.js"></script>
+  <script src="js/themes.js"></script>
+  <script src="js/parser.js"></script>
+  <script src="js/renderer.js"></script>
+  <script src="js/exporter.js"></script>
+  <script src="js/app.js"></script>
+
+</body>
+</html>

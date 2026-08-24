@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en" class="dark h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=3.0, user-scalable=yes">
+  <meta name="theme-color" content="#0b0f19">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Timetable Companion</title>
+
+  <!-- PWA Web App Manifest -->
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='128' fill='%231e293b'/%3E%3Cpath d='M120 160h272M120 256h272M120 352h180' stroke='%2338bdf8' stroke-width='36' stroke-linecap='round'/%3E%3Ccircle cx='380' cy='352' r='48' fill='%23f43f5e'/%3E%3Cpolyline points='380 336 380 352 392 360' stroke='white' stroke-width='10' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              500: '#3b82f6',
+              600: '#2563eb',
+              700: '#1d4ed8'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Google Fonts Direct Links -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&family=Outfit:wght@400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,600;0,700;0,900;1,600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Export Engines -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html-to-image/1.11.11/html-to-image.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+  <!-- Core Styles -->
+  <link rel="stylesheet" href="../css/styles.css">
+
+  <style>
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background-color: #0b0f19;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    /* Hide scrollbars across all browsers while retaining smooth scroll */
+    .hide-scrollbar {
+      -ms-overflow-style: none; /* IE and Edge */
+      scrollbar-width: none; /* Firefox */
+    }
+    .hide-scrollbar::-webkit-scrollbar {
+      display: none; /* Chrome, Safari, Opera */
+    }
+
+    /* Timetable Stage Canvas */
+    #mobile-fullscreen-stage {
+      width: 100vw;
+      height: 100vh;
+      overflow: auto;
+      -webkit-overflow-scrolling: touch;
+      display: flex;
+      align-items: flex-start;
+      justify-content: flex-start;
+      padding: 12px;
+      box-sizing: border-box;
+    }
+
+    #mobile-timetable-container {
+      width: 1400px;
+      min-width: 1400px;
+      margin: auto;
+      transition: opacity 0.2s ease;
+    }
+
+    /* Interactive Class Card Styling */
+    .timetable-poster .class-card {
+      cursor: pointer;
+      position: relative;
+    }
+    .timetable-poster .class-card:hover,
+    .timetable-poster .class-card:active {
+      transform: scale(0.985);
+      filter: brightness(1.15);
+      box-shadow: 0 0 16px rgba(59, 130, 246, 0.4);
+    }
+
+    /* Spotlight Mode: Dim non-focused cards */
+    .spotlight-active .class-card:not(.spotlight-highlight) {
+      opacity: 0.2 !important;
+      filter: grayscale(0.8) blur(0.5px);
+    }
+    .spotlight-active .spotlight-highlight {
+      box-shadow: 0 0 20px #38bdf8 !important;
+      transform: scale(1.02);
+      z-index: 10;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 h-full overflow-hidden antialiased">
+
+  <!-- ================= FLOATING TOP LEFT HAMBURGER BUTTON ================= -->
+  <button 
+    id="drawer-toggle-btn"
+    class="fixed top-3.5 left-3.5 z-50 p-3 rounded-2xl bg-slate-900/85 backdrop-blur-xl border border-white/15 text-white shadow-2xl active:scale-90 transition-all flex items-center justify-center hover:bg-slate-800"
+    title="Open Menu"
+    aria-label="Open Menu"
+  >
+    <i data-lucide="menu" class="w-5 h-5 text-blue-400" id="hamburger-icon"></i>
+  </button>
+
+  <!-- ================= FLOATING TOP RIGHT ACTIONS (ATTENDANCE & FLIP) ================= -->
+  <div class="fixed top-3.5 right-3.5 z-40 flex items-center gap-2">
+    <!-- Active Subject Spotlight Reset Pill (Hidden by default) -->
+    <button 
+      id="spotlight-clear-btn" 
+      class="hidden px-3 py-1.5 rounded-2xl bg-blue-600/90 text-white text-xs font-bold shadow-lg backdrop-blur-md border border-blue-400/40 flex items-center gap-1.5 active:scale-95 animate-pulse"
+      title="Clear Spotlight"
+    >
+      <span id="spotlight-subj-text">Subject</span>
+      <i data-lucide="x" class="w-3.5 h-3.5"></i>
+    </button>
+
+    <!-- Quick Flip Button -->
+    <button 
+      id="quick-flip-btn"
+      class="p-2.5 rounded-2xl bg-slate-900/85 backdrop-blur-xl border border-white/15 text-slate-300 hover:text-white shadow-xl active:scale-90 transition-all"
+      title="Flip Layout (Rows/Columns)"
+    >
+      <i data-lucide="rotate-cw" class="w-4 h-4 text-emerald-400"></i>
+    </button>
+  </div>
+
+  <!-- ================= FULLSCREEN SCROLLABLE TIMETABLE CANVAS ================= -->
+  <div id="mobile-fullscreen-stage" class="hide-scrollbar">
+    <div id="mobile-timetable-container">
+      <!-- Complete vector timetable rendered here with 100% vector sharpness -->
+    </div>
+  </div>
+
+  <!-- ================= SLIDE-OUT DRAWER MENU ================= -->
+  <div id="drawer-backdrop" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm opacity-0 pointer-events-none transition-opacity duration-300"></div>
+
+  <aside 
+    id="drawer-menu" 
+    class="fixed top-0 left-0 bottom-0 z-50 w-80 max-w-[85vw] bg-slate-950/95 backdrop-blur-2xl border-r border-slate-800 flex flex-col -translate-x-full transition-transform duration-300 ease-out shadow-2xl"
+  >
+    <!-- Drawer Header -->
+    <div class="p-4 border-b border-slate-800 flex items-center justify-between">
+      <div class="min-w-0 flex-1 pr-2">
+        <div class="flex items-center gap-1.5 mb-0.5">
+          <span id="drawer-badge-sec" class="px-2 py-0.5 text-[10px] font-black rounded-md bg-blue-500/20 text-blue-300 border border-blue-500/30 uppercase">
+            Sec DF
+          </span>
+          <span id="drawer-badge-sem" class="px-2 py-0.5 text-[10px] font-bold rounded-md bg-slate-800 text-slate-300">
+            V Sem
+          </span>
+        </div>
+        <h2 id="drawer-univ-title" class="text-sm font-black uppercase text-white truncate leading-tight">
+          JECRC University
+        </h2>
+        <p id="drawer-dept-subtitle" class="text-[11px] text-slate-400 truncate">
+          Department of Computer Science
+        </p>
+      </div>
+
+      <button id="drawer-close-btn" class="p-2 text-slate-400 hover:text-white rounded-xl active:scale-90 transition-all">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+    </div>
+
+    <!-- Drawer Navigation List -->
+    <div class="flex-1 overflow-y-auto p-4 space-y-3 hide-scrollbar text-xs font-bold">
+
+      <!-- 1. Layout Orientation -->
+      <div class="space-y-1.5">
+        <label class="text-[10px] font-black uppercase tracking-wider text-slate-400">Timetable Orientation</label>
+        <button 
+          id="drawer-orient-btn"
+          class="w-full py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 flex items-center justify-between text-slate-200 active:scale-98 transition-all"
+        >
+          <div class="flex items-center gap-2">
+            <i data-lucide="layout-grid" class="w-4 h-4 text-blue-400"></i>
+            <span id="drawer-orient-text">Periods in Rows</span>
+          </div>
+          <span class="text-[10px] font-mono text-slate-400">Switch</span>
+        </button>
+      </div>
+
+      <!-- 2. Attendance Tracker Modal Trigger -->
+      <div class="space-y-1.5">
+        <label class="text-[10px] font-black uppercase tracking-wider text-slate-400">Attendance Manager</label>
+        <button 
+          id="drawer-att-btn"
+          class="w-full py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 flex items-center justify-between text-slate-200 active:scale-98 transition-all"
+        >
+          <div class="flex items-center gap-2">
+            <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-400"></i>
+            <span>75% Attendance Planner</span>
+          </div>
+          <span id="drawer-att-stat" class="text-[10px] font-mono text-emerald-400">Track</span>
+        </button>
+      </div>
+
+      <!-- 3. Insights Modal Trigger -->
+      <div class="space-y-1.5">
+        <label class="text-[10px] font-black uppercase tracking-wider text-slate-400">Analytics & Workload</label>
+        <button 
+          id="drawer-insights-btn"
+          class="w-full py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 flex items-center justify-between text-slate-200 active:scale-98 transition-all"
+        >
+          <div class="flex items-center gap-2">
+            <i data-lucide="bar-chart-3" class="w-4 h-4 text-amber-400"></i>
+            <span>Schedule Insights & Faculty</span>
+          </div>
+          <span class="text-[10px] font-mono text-slate-400">View</span>
+        </button>
+      </div>
+
+      <!-- 4. Save Image -->
+      <div class="space-y-1.5">
+        <label class="text-[10px] font-black uppercase tracking-wider text-slate-400">Export Graphic</label>
+        <button 
+          id="drawer-save-image-btn"
+          class="w-full py-2.5 px-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white flex items-center justify-center gap-2 shadow-lg shadow-blue-600/30 active:scale-98 transition-all"
+        >
+          <i data-lucide="download" class="w-4 h-4"></i>
+          <span>Save High-Res Image</span>
+        </button>
+      </div>
+
+      <!-- 5. Theme Selector (Accordion) -->
+      <div class="space-y-1.5 pt-2 border-t border-slate-800">
+        <label class="text-[10px] font-black uppercase tracking-wider text-slate-400">Choose Theme (17 Themes)</label>
+        <div id="drawer-theme-gallery" class="space-y-1.5 max-h-52 overflow-y-auto hide-scrollbar pr-1"></div>
+      </div>
+
+      <!-- 6. Switch / Import Timetable -->
+      <div class="space-y-1.5 pt-2 border-t border-slate-800">
+        <label class="text-[10px] font-black uppercase tracking-wider text-slate-400">Timetable Switcher</label>
+        
+        <label class="w-full py-2 px-3 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 flex items-center justify-center gap-2 cursor-pointer active:scale-98 transition-all text-[11px]">
+          <i data-lucide="folder-open" class="w-3.5 h-3.5 text-blue-400"></i>
+          <span>Import .ttstudio / .json</span>
+          <input type="file" id="drawer-file-input" accept=".ttstudio,.json,application/json" class="hidden">
+        </label>
+
+        <button 
+          id="drawer-export-bundle-btn"
+          class="w-full py-2 px-3 rounded-xl bg-indigo-950/60 border border-indigo-500/30 text-indigo-300 flex items-center justify-center gap-2 active:scale-98 transition-all text-[11px]"
+        >
+          <i data-lucide="package" class="w-3.5 h-3.5 text-indigo-400"></i>
+          <span>Export .ttstudio Package</span>
+        </button>
+      </div>
+
+      <!-- 7. PWA Install & Desktop Link -->
+      <div class="pt-2 border-t border-slate-800 space-y-2">
+        <button 
+          id="drawer-pwa-install-btn"
+          class="w-full py-2 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 flex items-center justify-center gap-2 active:scale-98 transition-all text-[11px]"
+        >
+          <i data-lucide="smartphone" class="w-3.5 h-3.5 text-emerald-400"></i>
+          <span>Add to Home Screen</span>
+        </button>
+
+        <a 
+          href="../index.html" 
+          class="w-full py-2 px-3 rounded-xl bg-slate-900/60 border border-slate-800/80 text-slate-400 flex items-center justify-center gap-2 active:scale-98 transition-all text-[11px]"
+        >
+          <i data-lucide="monitor" class="w-3.5 h-3.5"></i>
+          <span>Open Desktop Studio</span>
+        </a>
+      </div>
+
+    </div>
+  </aside>
+
+  <!-- ================= MODAL: CLASS CARD INTERACTION ================= -->
+  <div id="card-modal-backdrop" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm hidden items-end sm:items-center justify-center p-0 sm:p-4">
+    <div 
+      id="card-modal-panel" 
+      class="w-full sm:max-w-md bg-slate-950 border border-slate-800 rounded-t-3xl sm:rounded-3xl p-5 space-y-4 shadow-2xl transform transition-transform animate-in slide-in-from-bottom duration-200"
+    >
+      <div class="flex items-start justify-between">
+        <div>
+          <div class="flex items-center gap-2 text-xs font-bold text-slate-400 mb-1">
+            <span id="modal-card-day">Thursday</span>
+            <span>•</span>
+            <span id="modal-card-time">Lecture 3 (9.40-10.30)</span>
+          </div>
+          <h3 id="modal-card-subject" class="text-xl font-black text-white leading-tight">ML Lab</h3>
+        </div>
+
+        <button id="card-modal-close-btn" class="p-1.5 text-slate-400 hover:text-white rounded-xl active:scale-90">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="grid grid-cols-2 gap-2 text-xs">
+        <div class="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-0.5">
+          <span class="text-[10px] uppercase font-bold text-slate-400">Venue / Room</span>
+          <div id="modal-card-venue" class="font-extrabold text-slate-200">VIB 511</div>
+        </div>
+
+        <div class="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-0.5">
+          <span class="text-[10px] uppercase font-bold text-slate-400">Professor</span>
+          <div id="modal-card-faculty" class="font-extrabold text-slate-200">Mr. Ankit Taneza</div>
+        </div>
+      </div>
+
+      <!-- Quick Attendance Logger -->
+      <div class="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 space-y-2">
+        <div class="flex items-center justify-between text-xs">
+          <span class="font-bold text-slate-300">Subject Attendance</span>
+          <span id="modal-card-att-pct" class="font-mono font-black text-emerald-400">85% (12/14)</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="modal-card-att-add" class="flex-1 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold active:scale-95 transition-all">
+            + Attended Class
+          </button>
+          <button id="modal-card-att-miss" class="flex-1 py-2 rounded-xl bg-rose-600/80 hover:bg-rose-500 text-white text-xs font-bold active:scale-95 transition-all">
+            - Missed Class
+          </button>
+        </div>
+      </div>
+
+      <!-- Spotlight Button -->
+      <button 
+        id="modal-card-spotlight-btn" 
+        class="w-full py-2.5 rounded-xl bg-blue-600/20 border border-blue-500/40 text-blue-300 text-xs font-bold flex items-center justify-center gap-2 active:scale-95 transition-all"
+      >
+        <i data-lucide="sparkles" class="w-4 h-4 text-blue-400"></i>
+        <span>Spotlight this Subject across Week</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ================= MODAL: ATTENDANCE MANAGER ================= -->
+  <div id="attendance-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md hidden items-center justify-center p-4">
+    <div class="w-full max-w-md max-h-[85vh] bg-slate-950 border border-slate-800 rounded-3xl p-5 flex flex-col shadow-2xl">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div>
+          <h3 class="text-base font-black text-white">Attendance Manager</h3>
+          <p class="text-xs text-slate-400">75% Minimum Target Tracker</p>
+        </div>
+        <button id="attendance-modal-close" class="p-1.5 text-slate-400 hover:text-white rounded-xl active:scale-90">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div id="attendance-modal-list" class="flex-1 overflow-y-auto py-3 space-y-3 hide-scrollbar"></div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL: SCHEDULE INSIGHTS ================= -->
+  <div id="insights-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md hidden items-center justify-center p-4">
+    <div class="w-full max-w-md max-h-[85vh] bg-slate-950 border border-slate-800 rounded-3xl p-5 flex flex-col shadow-2xl">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div>
+          <h3 class="text-base font-black text-white">Schedule Insights</h3>
+          <p class="text-xs text-slate-400">Weekly Workload & Faculty Directory</p>
+        </div>
+        <button id="insights-modal-close" class="p-1.5 text-slate-400 hover:text-white rounded-xl active:scale-90">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div id="insights-modal-body" class="flex-1 overflow-y-auto py-3 space-y-3 hide-scrollbar"></div>
+    </div>
+  </div>
+
+  <!-- Initialize Lucide Icons -->
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      if (window.lucide) lucide.createIcons();
+    });
+  </script>
+
+  <!-- Core Scripts in Order -->
+  <script src="../js/samples.js"></script>
+  <script src="../js/themes.js"></script>
+  <script src="../js/parser.js"></script>
+  <script src="../js/renderer.js"></script>
+  <script src="../js/exporter.js"></script>
+  <script src="./js/mobile-app.js"></script>
+
+</body>
+</html>

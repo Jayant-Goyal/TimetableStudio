@@ -1,0 +1,547 @@
+/* Timetable Studio Stylesheet */
+
+:root {
+  --font-inter: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-jakarta: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-outfit: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-space: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-playfair: 'Playfair Display', Georgia, serif;
+  --font-mono: 'JetBrains Mono', 'Courier New', monospace;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-jakarta);
+  background-color: #0b0f19;
+  color: #f1f5f9;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  letter-spacing: normal !important;
+}
+
+.font-inter { font-family: var(--font-inter) !important; }
+.font-jakarta { font-family: var(--font-jakarta) !important; }
+.font-outfit { font-family: var(--font-outfit) !important; }
+.font-space { font-family: var(--font-space) !important; }
+.font-playfair { font-family: var(--font-playfair) !important; }
+.font-mono { font-family: var(--font-mono) !important; }
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.6);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.3);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.5);
+}
+
+/* Stage Canvas Background Grid */
+.preview-stage-bg {
+  background-color: #0f172a;
+  background-image: radial-gradient(rgba(148, 163, 184, 0.12) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Glassmorphism sidebar & topbar */
+.glass-panel {
+  background: rgba(17, 24, 39, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+/* Animated subtle glow */
+.glow-accent {
+  box-shadow: 0 0 20px -3px rgba(59, 130, 246, 0.3);
+}
+
+/* =========================================================
+   TIMETABLE POSTER BULLETPROOF STRUCTURAL STYLES
+   ========================================================= */
+
+.timetable-export-wrapper {
+  box-sizing: border-box;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.timetable-poster {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  letter-spacing: normal !important;
+}
+
+/* Header */
+.poster-header {
+  box-sizing: border-box;
+  padding: 24px 28px;
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+}
+
+.poster-header-content {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  position: relative;
+  z-index: 2;
+  width: 100%;
+}
+
+.poster-title-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: normal !important;
+  border-radius: 6px;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.poster-type-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 6px;
+  white-space: nowrap;
+  letter-spacing: normal !important;
+  line-height: 1.2;
+}
+
+.poster-univ-title {
+  font-size: 26px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: normal !important;
+  margin: 6px 0 2px 0;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.poster-dept-subtitle {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: normal !important;
+  margin: 0;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.poster-meta-group {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.poster-meta-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 800;
+  border-radius: 8px;
+  white-space: nowrap;
+  letter-spacing: normal !important;
+  line-height: 1.2;
+}
+
+/* Grid Table */
+.timetable-table-container {
+  box-sizing: border-box;
+  padding: 20px 28px;
+  width: 100%;
+}
+
+.timetable-grid-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  box-sizing: border-box;
+}
+
+.timetable-grid-table th,
+.timetable-grid-table td {
+  box-sizing: border-box;
+  vertical-align: top;
+  position: relative;
+  letter-spacing: normal !important;
+}
+
+/* Table Headers */
+.th-corner-header {
+  padding: 12px 16px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: normal !important;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.th-day-col {
+  padding: 12px 10px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: normal !important;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.th-period-row {
+  padding: 12px 16px;
+  text-align: left;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.period-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.3;
+  white-space: nowrap;
+  letter-spacing: normal !important;
+}
+
+.period-time-sub {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  margin-top: 4px;
+  line-height: 1.3;
+  white-space: nowrap;
+  letter-spacing: normal !important;
+}
+
+/* Class Card */
+.class-card {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border-width: 1px;
+  border-style: solid;
+  height: 100%;
+  width: 100%;
+  min-height: 94px;
+  line-height: 1.4;
+  letter-spacing: normal !important;
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+/* Spanned Multi-Period Card Extension */
+.class-card-spanned {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 100%;
+}
+
+.class-card-top {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  width: 100%;
+}
+
+.class-subject-text {
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: normal !important;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+
+.class-badges-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.class-lab-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+  border-radius: 4px;
+  border-width: 1px;
+  border-style: solid;
+  white-space: nowrap;
+  letter-spacing: normal !important;
+  line-height: 1.2;
+}
+
+.class-span-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 5px;
+  font-size: 10px;
+  font-weight: 900;
+  border-radius: 4px;
+  white-space: nowrap;
+  letter-spacing: normal !important;
+  line-height: 1.2;
+}
+
+.class-card-bottom {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: auto;
+  padding-top: 6px;
+  font-size: 11px;
+  line-height: 1.35;
+  width: 100%;
+}
+
+.class-venue-text,
+.class-faculty-text {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 700;
+  font-size: 11px;
+  text-align: left;
+  letter-spacing: normal !important;
+  line-height: 1.3;
+  width: 100%;
+}
+
+.icon-svg {
+  display: inline-block;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+/* Empty Cell */
+.empty-cell-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 50px;
+  opacity: 0.35;
+  font-size: 13px;
+  font-weight: 700;
+  user-select: none;
+}
+
+/* Faculty Directory Legend */
+.poster-legend-section {
+  box-sizing: border-box;
+  padding: 0 28px 20px 28px;
+  width: 100%;
+}
+
+.poster-legend-card {
+  box-sizing: border-box;
+  padding: 14px 18px;
+  border-radius: 12px;
+  border-width: 1px;
+  border-style: solid;
+  width: 100%;
+}
+
+.poster-legend-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: normal !important;
+  margin-bottom: 12px;
+  white-space: nowrap;
+  line-height: 1.3;
+}
+
+.poster-legend-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
+.legend-item-card {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 12px;
+  border-radius: 8px;
+  border-width: 1px;
+  border-style: solid;
+  font-size: 12px;
+  box-sizing: border-box;
+  overflow: hidden;
+  width: 100%;
+}
+
+.legend-subject-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 900;
+  border-radius: 6px;
+  border-width: 1px;
+  border-style: solid;
+  white-space: nowrap;
+  letter-spacing: normal !important;
+  flex-shrink: 0;
+  line-height: 1.2;
+  box-sizing: border-box;
+}
+
+.legend-faculty-name {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 700;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: normal !important;
+  line-height: 1.3;
+}
+
+/* Poster Footer */
+.poster-footer {
+  box-sizing: border-box;
+  padding: 12px 28px;
+  border-top-width: 1px;
+  border-top-style: solid;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.85;
+  white-space: nowrap;
+  letter-spacing: normal !important;
+  width: 100%;
+  line-height: 1.3;
+}
+
+/* Theme Picker Card */
+.theme-card {
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.theme-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(59, 130, 246, 0.6);
+}
+
+.theme-card.active {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.4);
+}
+
+/* Toast Container */
+#toast-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  animation: toastIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transition: all 0.3s ease;
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Pulsing Export Spinner */
+@keyframes spinSlow {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.spinner-spin {
+  animation: spinSlow 0.8s linear infinite;
+}
