@@ -275,9 +275,42 @@ class MobileTimetableApp {
    * Setup global event listeners
    */
   setupEventListeners() {
-    // 1. View Mode Toggle (Fit / Fill)
+    // 1. HUD Auto-Hide & Reveal Controller
+    this.hudTimer = null;
+
+    // Edge-swipe to open drawer gesture
+    let touchStartX = 0;
+    let touchStartY = 0;
+
+    window.addEventListener('touchstart', (e) => {
+      this.enableFullscreen();
+      if (e.touches.length === 1) {
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+      }
+    }, { passive: true });
+
+    window.addEventListener('touchend', (e) => {
+      if (e.changedTouches.length === 1) {
+        const touchEndX = e.changedTouches[0].clientX;
+        const touchEndY = e.changedTouches[0].clientY;
+        const deltaX = touchEndX - touchStartX;
+        const deltaY = Math.abs(touchEndY - touchStartY);
+
+        // Edge swipe from left (< 45px) moving right (> 50px)
+        if (touchStartX < 45 && deltaX > 50 && deltaY < 80) {
+          const drawer = document.getElementById('drawer-menu');
+          const backdrop = document.getElementById('drawer-backdrop');
+          drawer?.classList.remove('-translate-x-full');
+          backdrop?.classList.remove('opacity-0', 'pointer-events-none');
+        }
+      }
+    }, { passive: true });
+
+    // 2. View Mode Toggle (Fit / Fill)
     const toggleViewMode = () => {
       this.toggleViewMode();
+      this.showHUD(3000);
     };
 
     document.getElementById('view-mode-toggle-btn')?.addEventListener('click', toggleViewMode);
@@ -286,25 +319,26 @@ class MobileTimetableApp {
       document.getElementById('drawer-close-btn')?.click();
     });
 
-    // 2. Faculty Visibility Toggle
+    // 3. Faculty Visibility Toggle
     document.getElementById('drawer-faculty-btn')?.addEventListener('click', () => {
       this.toggleFacultyVisibility();
     });
 
-    // 3. Resize listener for Fit mode adjustment
+    // 4. Resize listener for Fit mode adjustment
     window.addEventListener('resize', () => {
       if (this.state.viewMode === 'fit') {
         this.applyViewMode();
       }
     });
 
-    // 4. Global Stage Click / Tap & Double-Tap Anywhere Listener
+    // 5. Global Stage Click / Tap & Double-Tap Anywhere Listener
     const stage = document.getElementById('mobile-fullscreen-stage');
     let stageLastTapTime = 0;
     let stageSingleTapTimer = null;
     const DOUBLE_TAP_DELAY = 280;
 
     stage?.addEventListener('click', (e) => {
+      this.enableFullscreen();
       const now = Date.now();
       const timeSinceLast = now - stageLastTapTime;
       const card = e.target.closest('.class-card');
@@ -331,11 +365,19 @@ class MobileTimetableApp {
               this.openCardModal(subjectText, card);
             }
           }, DOUBLE_TAP_DELAY);
+        } else {
+          // Single tap on empty space / canvas: Toggle HUD buttons visibility!
+          if (stageSingleTapTimer) clearTimeout(stageSingleTapTimer);
+          stageSingleTapTimer = setTimeout(() => {
+            stageSingleTapTimer = null;
+            stageLastTapTime = 0;
+            this.toggleHUD();
+          }, DOUBLE_TAP_DELAY);
         }
       }
     });
 
-    // 5. Quick flip & drawer flip
+    // 6. Quick flip & drawer flip
     const toggleOrientation = () => {
       this.state.orientation = this.state.orientation === 'periods-in-rows' ? 'periods-in-columns' : 'periods-in-rows';
       localStorage.setItem('ttstudio_mobile_orientation', this.state.orientation);
@@ -343,6 +385,7 @@ class MobileTimetableApp {
       if (orientText) orientText.textContent = this.state.orientation === 'periods-in-rows' ? 'Periods in Rows' : 'Periods in Columns';
       this.renderTimetable();
       this.showToast(`Switched: ${this.state.orientation === 'periods-in-rows' ? 'Periods in Rows' : 'Periods in Columns'}`);
+      this.showHUD(3000);
     };
 
     document.getElementById('quick-flip-btn')?.addEventListener('click', toggleOrientation);
@@ -397,6 +440,59 @@ class MobileTimetableApp {
       }, cleanName);
       this.showToast('Downloaded .ttstudio package with attendance!', 'success');
     });
+  }
+
+  /**
+   * Request Android Immersive Fullscreen Mode
+   */
+  enableFullscreen() {
+    if (!document.fullscreenElement) {
+      const docEl = document.documentElement;
+      if (docEl.requestFullscreen) {
+        docEl.requestFullscreen().catch(() => {});
+      } else if (docEl.webkitRequestFullscreen) {
+        docEl.webkitRequestFullscreen();
+      }
+    }
+  }
+
+  /**
+   * Show floating HUD controls with auto-hide timer
+   */
+  showHUD(duration = 4000) {
+    const hud = document.getElementById('mobile-hud-layer');
+    if (!hud) return;
+    hud.classList.remove('hud-hidden');
+    if (this.hudTimer) clearTimeout(this.hudTimer);
+    if (duration > 0) {
+      this.hudTimer = setTimeout(() => {
+        this.hideHUD();
+      }, duration);
+    }
+  }
+
+  /**
+   * Hide floating HUD controls
+   */
+  hideHUD() {
+    const hud = document.getElementById('mobile-hud-layer');
+    if (hud) hud.classList.add('hud-hidden');
+    if (this.hudTimer) {
+      clearTimeout(this.hudTimer);
+      this.hudTimer = null;
+    }
+  }
+
+  /**
+   * Toggle floating HUD visibility
+   */
+  toggleHUD() {
+    const hud = document.getElementById('mobile-hud-layer');
+    if (hud && hud.classList.contains('hud-hidden')) {
+      this.showHUD(4000);
+    } else {
+      this.hideHUD();
+    }
   }
 
   /**
