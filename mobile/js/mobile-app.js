@@ -277,34 +277,67 @@ class MobileTimetableApp {
   setupEventListeners() {
     // 1. HUD Auto-Hide & Reveal Controller
     this.hudTimer = null;
+    this.fullscreenRequested = false;
 
-    // Edge-swipe to open drawer gesture
+    const stage = document.getElementById('mobile-fullscreen-stage');
     let touchStartX = 0;
     let touchStartY = 0;
+    let isDragging = false;
+    let wasDragging = false;
+    let wasDraggingTimer = null;
+    let isPinching = false;
+    const DRAG_THRESHOLD = 10; // px
 
+    // Touch Event Tracking on Stage (Distinguish Drag/Scroll vs Tap)
     window.addEventListener('touchstart', (e) => {
       this.enableFullscreen();
       if (e.touches.length === 1) {
         touchStartX = e.touches[0].clientX;
         touchStartY = e.touches[0].clientY;
+        isDragging = false;
+        isPinching = false;
+      } else if (e.touches.length > 1) {
+        isPinching = true;
+        isDragging = true;
+      }
+    }, { passive: true });
+
+    window.addEventListener('touchmove', (e) => {
+      if (e.touches.length === 1 && !isDragging) {
+        const dx = e.touches[0].clientX - touchStartX;
+        const dy = e.touches[0].clientY - touchStartY;
+        if (Math.hypot(dx, dy) > DRAG_THRESHOLD) {
+          isDragging = true;
+        }
       }
     }, { passive: true });
 
     window.addEventListener('touchend', (e) => {
+      if (isDragging || isPinching) {
+        wasDragging = true;
+        if (wasDraggingTimer) clearTimeout(wasDraggingTimer);
+        wasDraggingTimer = setTimeout(() => {
+          wasDragging = false;
+        }, 120);
+      }
+
       if (e.changedTouches.length === 1) {
         const touchEndX = e.changedTouches[0].clientX;
         const touchEndY = e.changedTouches[0].clientY;
         const deltaX = touchEndX - touchStartX;
         const deltaY = Math.abs(touchEndY - touchStartY);
 
-        // Edge swipe from left (< 45px) moving right (> 50px)
-        if (touchStartX < 45 && deltaX > 50 && deltaY < 80) {
+        // Edge swipe from left (< 40px) moving right (> 50px)
+        if (touchStartX < 40 && deltaX > 50 && deltaY < 60) {
           const drawer = document.getElementById('drawer-menu');
           const backdrop = document.getElementById('drawer-backdrop');
           drawer?.classList.remove('-translate-x-full');
           backdrop?.classList.remove('opacity-0', 'pointer-events-none');
         }
       }
+
+      isDragging = false;
+      isPinching = false;
     }, { passive: true });
 
     // 2. View Mode Toggle (Fit / Fill)
@@ -331,13 +364,17 @@ class MobileTimetableApp {
       }
     });
 
-    // 5. Global Stage Click / Tap & Double-Tap Anywhere Listener
-    const stage = document.getElementById('mobile-fullscreen-stage');
+    // 5. Global Stage Click / Tap & Double-Tap Anywhere Listener (with Drag Filtering)
     let stageLastTapTime = 0;
     let stageSingleTapTimer = null;
-    const DOUBLE_TAP_DELAY = 280;
+    const DOUBLE_TAP_DELAY = 260;
 
     stage?.addEventListener('click', (e) => {
+      // IF USER WAS DRAGGING / PANNING THE TIMETABLE -> SUPPRESS CLICK ACTION!
+      if (isDragging || wasDragging) {
+        return;
+      }
+
       this.enableFullscreen();
       const now = Date.now();
       const timeSinceLast = now - stageLastTapTime;
@@ -361,7 +398,7 @@ class MobileTimetableApp {
           stageSingleTapTimer = setTimeout(() => {
             stageSingleTapTimer = null;
             stageLastTapTime = 0;
-            if (subjectText) {
+            if (subjectText && !wasDragging) {
               this.openCardModal(subjectText, card);
             }
           }, DOUBLE_TAP_DELAY);
@@ -371,7 +408,9 @@ class MobileTimetableApp {
           stageSingleTapTimer = setTimeout(() => {
             stageSingleTapTimer = null;
             stageLastTapTime = 0;
-            this.toggleHUD();
+            if (!wasDragging) {
+              this.toggleHUD();
+            }
           }, DOUBLE_TAP_DELAY);
         }
       }
@@ -391,12 +430,12 @@ class MobileTimetableApp {
     document.getElementById('quick-flip-btn')?.addEventListener('click', toggleOrientation);
     document.getElementById('drawer-orient-btn')?.addEventListener('click', toggleOrientation);
 
-    // 6. Save Image button
+    // 7. Save Image button
     document.getElementById('drawer-save-image-btn')?.addEventListener('click', async () => {
       await this.saveTimetableImage();
     });
 
-    // 7. File import in drawer
+    // 8. File import in drawer
     document.getElementById('drawer-file-input')?.addEventListener('change', (e) => {
       const file = e.target.files?.[0];
       if (!file) return;
@@ -429,7 +468,7 @@ class MobileTimetableApp {
       reader.readAsText(file);
     });
 
-    // 8. Export .ttstudio bundle
+    // 9. Export .ttstudio bundle
     document.getElementById('drawer-export-bundle-btn')?.addEventListener('click', () => {
       if (!this.state.parsedData) return;
       const cleanName = (this.state.parsedData.university || 'Timetable').replace(/[^a-z0-9_-]/gi, '_');
@@ -443,16 +482,14 @@ class MobileTimetableApp {
   }
 
   /**
-   * Request Android Immersive Fullscreen Mode
+   * Request Android Immersive Fullscreen Mode safely
    */
   enableFullscreen() {
-    if (!document.fullscreenElement) {
-      const docEl = document.documentElement;
-      if (docEl.requestFullscreen) {
-        docEl.requestFullscreen().catch(() => {});
-      } else if (docEl.webkitRequestFullscreen) {
-        docEl.webkitRequestFullscreen();
-      }
+    if (this.fullscreenRequested) return;
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.matchMedia('(display-mode: fullscreen)').matches || window.navigator.standalone;
+    if (!isStandalone && !document.fullscreenElement && document.documentElement.requestFullscreen) {
+      this.fullscreenRequested = true;
+      document.documentElement.requestFullscreen().catch(() => {});
     }
   }
 

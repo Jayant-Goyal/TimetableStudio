@@ -2,15 +2,16 @@
 <html lang="en" class="dark h-full">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=3.0, user-scalable=yes">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=3.0, user-scalable=yes, viewport-fit=cover">
   <meta name="theme-color" content="#0b0f19">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Timetable Companion</title>
 
   <!-- PWA Web App Manifest -->
   <link rel="manifest" href="manifest.json">
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='128' fill='%231e293b'/%3E%3Cpath d='M120 160h272M120 256h272M120 352h180' stroke='%2338bdf8' stroke-width='36' stroke-linecap='round'/%3E%3Ccircle cx='380' cy='352' r='48' fill='%23f43f5e'/%3E%3Cpolyline points='380 336 380 352 392 360' stroke='white' stroke-width='10' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='128' fill='%230b0f19'/%3E%3Crect x='32' y='32' width='448' height='448' rx='96' fill='%231e293b' stroke='%2338bdf8' stroke-width='16'/%3E%3Cpath d='M120 160h272M120 256h272M120 352h180' stroke='%2338bdf8' stroke-width='36' stroke-linecap='round'/%3E%3Ccircle cx='380' cy='352' r='48' fill='%23f43f5e'/%3E%3Cpolyline points='380 336 380 352 392 360' stroke='white' stroke-width='10' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
 
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -81,14 +82,14 @@
       align-items: center;
       justify-content: center;
       overflow: hidden;
-      padding: 0;
+      padding: env(safe-area-inset-top, 8px) env(safe-area-inset-right, 8px) env(safe-area-inset-bottom, 8px) env(safe-area-inset-left, 8px);
     }
 
     #mobile-fullscreen-stage.stage-mode-fill {
       display: block;
       overflow: auto;
       -webkit-overflow-scrolling: touch;
-      padding: 16px;
+      padding: calc(16px + env(safe-area-inset-top, 0px)) calc(16px + env(safe-area-inset-right, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)) calc(16px + env(safe-area-inset-left, 0px));
     }
 
     #mobile-timetable-container {
@@ -131,29 +132,25 @@
       transform: translateY(-8px) !important;
     }
 
-    /* Edge swipe zone for instant drawer opening */
-    #edge-drawer-trigger {
-      position: fixed;
-      top: 0;
-      left: 0;
-      bottom: 0;
-      width: 24px;
-      z-index: 45;
-      touch-action: pan-y;
+    /* Floating buttons with safe-area spacing */
+    .floating-top-left {
+      top: calc(14px + env(safe-area-inset-top, 0px));
+      left: calc(14px + env(safe-area-inset-left, 0px));
+    }
+    .floating-top-right {
+      top: calc(14px + env(safe-area-inset-top, 0px));
+      right: calc(14px + env(safe-area-inset-right, 0px));
     }
   </style>
 </head>
 <body class="bg-slate-950 text-slate-100 h-full overflow-hidden antialiased">
-
-  <!-- ================= EDGE SWIPE DETECTOR ZONE ================= -->
-  <div id="edge-drawer-trigger"></div>
 
   <!-- ================= FLOATING HUD LAYER (AUTO-HIDDEN BY DEFAULT) ================= -->
   <div id="mobile-hud-layer" class="hud-hidden">
     <!-- Top Left Hamburger Button -->
     <button 
       id="drawer-toggle-btn"
-      class="fixed top-3.5 left-3.5 z-50 p-3 rounded-2xl bg-slate-900/90 backdrop-blur-xl border border-white/15 text-white shadow-2xl active:scale-90 transition-all flex items-center justify-center hover:bg-slate-800"
+      class="fixed floating-top-left z-50 p-3 rounded-2xl bg-slate-900/90 backdrop-blur-xl border border-white/15 text-white shadow-2xl active:scale-90 transition-all flex items-center justify-center hover:bg-slate-800"
       title="Open Menu"
       aria-label="Open Menu"
     >
@@ -161,7 +158,7 @@
     </button>
 
     <!-- Top Right Actions (Fit/Fill, Flip, Spotlight) -->
-    <div class="fixed top-3.5 right-3.5 z-50 flex items-center gap-2">
+    <div class="fixed floating-top-right z-50 flex items-center gap-2">
       <!-- Active Subject Spotlight Reset Pill (Hidden by default) -->
       <button 
         id="spotlight-clear-btn" 
