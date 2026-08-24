@@ -425,7 +425,7 @@ class TimetableRenderer {
     `;
 
     // 3. Faculty / Subject Legend Table
-    if (showLegend && showFaculty && parsedData.faculty && parsedData.faculty.length > 0) {
+    if (showLegend && parsedData.faculty && parsedData.faculty.length > 0) {
       html += `
         <div class="poster-legend-section">
           <div 
@@ -567,7 +567,7 @@ class TimetableRenderer {
             </div>
           ` : ''}
 
-          ${(cell.faculty && showFaculty) ? `
+          ${cell.faculty ? `
             <div class="class-faculty-text" title="${cell.faculty}">
               ${SVG_ICONS.user}
               <span>${cell.faculty}</span>

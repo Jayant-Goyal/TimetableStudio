@@ -11,7 +11,7 @@ class MobileTimetableApp {
       themeId: localStorage.getItem('ttstudio_mobile_theme') || 'cyberpunk-neon',
       orientation: localStorage.getItem('ttstudio_mobile_orientation') || 'periods-in-rows',
       viewMode: 'fill', // 'fill' (default pannable) or 'fit' (whole screen)
-      showFaculty: localStorage.getItem('ttstudio_show_faculty') !== 'false',
+      showFacultyDirectory: localStorage.getItem('ttstudio_show_faculty_directory') !== 'false',
       attendance: this.loadAttendanceState(),
       spotlightSubject: null,
       activeModalClass: null,
@@ -245,6 +245,24 @@ class MobileTimetableApp {
       insModal?.classList.remove('flex');
     });
 
+    // Theme Picker modal
+    const themeModal = document.getElementById('theme-modal');
+    document.getElementById('drawer-theme-btn')?.addEventListener('click', () => {
+      this.renderThemeGallery();
+      themeModal?.classList.remove('hidden');
+      themeModal?.classList.add('flex');
+    });
+    document.getElementById('theme-modal-close')?.addEventListener('click', () => {
+      themeModal?.classList.add('hidden');
+      themeModal?.classList.remove('flex');
+    });
+    themeModal?.addEventListener('click', (e) => {
+      if (e.target === themeModal) {
+        themeModal.classList.add('hidden');
+        themeModal.classList.remove('flex');
+      }
+    });
+
     // Card Detail modal
     const cardModal = document.getElementById('card-modal-backdrop');
     document.getElementById('card-modal-close-btn')?.addEventListener('click', () => {
@@ -305,12 +323,17 @@ class MobileTimetableApp {
     let isPinching = false;
     const DRAG_THRESHOLD = 10; // px
 
-    // Touch Event Tracking on Stage (Distinguish Drag/Scroll vs Tap)
-    window.addEventListener('touchstart', (e) => {
+    // Touch Event Tracking on Stage (Distinguish Drag/Scroll vs Tap on timetable canvas ONLY)
+    let lastTouchClientX = window.innerWidth / 2;
+    let lastTouchClientY = window.innerHeight / 2;
+
+    stage?.addEventListener('touchstart', (e) => {
       this.enableFullscreen();
       if (e.touches.length === 1) {
         touchStartX = e.touches[0].clientX;
         touchStartY = e.touches[0].clientY;
+        lastTouchClientX = e.touches[0].clientX;
+        lastTouchClientY = e.touches[0].clientY;
         isDragging = false;
         isPinching = false;
       } else if (e.touches.length > 1) {
@@ -319,7 +342,7 @@ class MobileTimetableApp {
       }
     }, { passive: true });
 
-    window.addEventListener('touchmove', (e) => {
+    stage?.addEventListener('touchmove', (e) => {
       if (e.touches.length === 1 && !isDragging) {
         const dx = e.touches[0].clientX - touchStartX;
         const dy = e.touches[0].clientY - touchStartY;
@@ -329,7 +352,7 @@ class MobileTimetableApp {
       }
     }, { passive: true });
 
-    window.addEventListener('touchend', (e) => {
+    stage?.addEventListener('touchend', (e) => {
       if (isDragging || isPinching) {
         wasDragging = true;
         if (wasDraggingTimer) clearTimeout(wasDraggingTimer);
@@ -337,24 +360,37 @@ class MobileTimetableApp {
           wasDragging = false;
         }, 120);
       }
+      isDragging = false;
+      isPinching = false;
+    }, { passive: true });
 
-      if (e.changedTouches.length === 1) {
-        const touchEndX = e.changedTouches[0].clientX;
-        const touchEndY = e.changedTouches[0].clientY;
-        const deltaX = touchEndX - touchStartX;
-        const deltaY = Math.abs(touchEndY - touchStartY);
+    // Edge swipe listener for opening drawer (only when drawer is closed)
+    let edgeStartX = -1;
+    let edgeStartY = -1;
 
-        // Edge swipe from left (< 40px) moving right (> 50px)
-        if (touchStartX < 40 && deltaX > 50 && deltaY < 60) {
+    window.addEventListener('touchstart', (e) => {
+      const drawer = document.getElementById('drawer-menu');
+      const isDrawerOpen = drawer && !drawer.classList.contains('-translate-x-full');
+      if (!isDrawerOpen && e.touches.length === 1 && e.touches[0].clientX < 35) {
+        edgeStartX = e.touches[0].clientX;
+        edgeStartY = e.touches[0].clientY;
+      } else {
+        edgeStartX = -1;
+      }
+    }, { passive: true });
+
+    window.addEventListener('touchend', (e) => {
+      if (edgeStartX >= 0 && e.changedTouches.length === 1) {
+        const deltaX = e.changedTouches[0].clientX - edgeStartX;
+        const deltaY = Math.abs(e.changedTouches[0].clientY - edgeStartY);
+        if (deltaX > 45 && deltaY < 60) {
           const drawer = document.getElementById('drawer-menu');
           const backdrop = document.getElementById('drawer-backdrop');
           drawer?.classList.remove('-translate-x-full');
           backdrop?.classList.remove('opacity-0', 'pointer-events-none');
         }
+        edgeStartX = -1;
       }
-
-      isDragging = false;
-      isPinching = false;
     }, { passive: true });
 
     // 2. View Mode Toggle (Fit / Fill)
@@ -396,6 +432,8 @@ class MobileTimetableApp {
       const now = Date.now();
       const timeSinceLast = now - stageLastTapTime;
       const card = e.target.closest('.class-card');
+      const tapX = (e.clientX && e.clientX > 0) ? e.clientX : lastTouchClientX;
+      const tapY = (e.clientY && e.clientY > 0) ? e.clientY : lastTouchClientY;
 
       if (timeSinceLast < DOUBLE_TAP_DELAY && timeSinceLast > 0) {
         // === DOUBLE TAP DETECTED ANYWHERE ===
@@ -404,7 +442,7 @@ class MobileTimetableApp {
           clearTimeout(stageSingleTapTimer);
           stageSingleTapTimer = null;
         }
-        this.handleGlobalDoubleTap(e.clientX, e.clientY, card);
+        this.handleGlobalDoubleTap(tapX, tapY, card);
       } else {
         // === POTENTIAL SINGLE TAP ===
         stageLastTapTime = now;
@@ -550,44 +588,78 @@ class MobileTimetableApp {
   }
 
   /**
-   * Toggle Faculty Visibility
+   * Toggle Bottom Faculty Directory Visibility (Immediate dynamic re-render)
    */
   toggleFacultyVisibility() {
-    this.state.showFaculty = !this.state.showFaculty;
-    localStorage.setItem('ttstudio_show_faculty', this.state.showFaculty);
-    this.updateFacultyDrawerUI();
+    this.state.showFacultyDirectory = !this.state.showFacultyDirectory;
+    localStorage.setItem('ttstudio_show_faculty_directory', String(this.state.showFacultyDirectory));
+    
+    // 1. Re-render the timetable DOM immediately with new bottom directory setting
     this.renderTimetable();
-    this.showToast(this.state.showFaculty ? 'Faculty details: Visible' : 'Faculty details: Hidden');
+    
+    // 2. Update the drawer UI text and toggle badge
+    this.updateFacultyDrawerUI();
+    
+    this.showToast(this.state.showFacultyDirectory ? 'Bottom Directory: Visible' : 'Bottom Directory: Hidden', 'success');
   }
 
   /**
-   * Update Faculty Toggle Drawer UI
+   * Update Faculty Toggle Drawer UI safely
    */
   updateFacultyDrawerUI() {
-    const icon = document.getElementById('faculty-toggle-icon');
+    const iconWrap = document.getElementById('faculty-toggle-icon-wrap');
     const text = document.getElementById('drawer-faculty-text');
     const badge = document.getElementById('faculty-toggle-badge');
 
-    if (text) text.textContent = `Faculty: ${this.state.showFaculty ? 'Visible' : 'Hidden'}`;
-    if (badge) badge.textContent = this.state.showFaculty ? 'Hide' : 'Show';
-    if (icon) {
-      icon.setAttribute('data-lucide', this.state.showFaculty ? 'user-check' : 'user-x');
-      icon.className = `w-4 h-4 ${this.state.showFaculty ? 'text-emerald-400' : 'text-slate-400'}`;
-      if (window.lucide) lucide.createIcons();
+    if (text) text.textContent = `Bottom Directory: ${this.state.showFacultyDirectory ? 'Visible' : 'Hidden'}`;
+    if (badge) badge.textContent = this.state.showFacultyDirectory ? 'Hide' : 'Show';
+    if (iconWrap) {
+      iconWrap.innerHTML = `<i data-lucide="${this.state.showFacultyDirectory ? 'book-open' : 'book-x'}" class="w-4 h-4 ${this.state.showFacultyDirectory ? 'text-emerald-400' : 'text-slate-400'}"></i>`;
+      if (window.lucide) {
+        try { lucide.createIcons({ root: iconWrap }); } catch (e) {}
+      }
     }
   }
 
   /**
-   * Toggle View Mode (Fill vs Fit)
+   * Toggle View Mode (Fill vs Fit) with center focal zoom
    */
   toggleViewMode() {
-    this.state.viewMode = this.state.viewMode === 'fill' ? 'fit' : 'fill';
-    this.applyViewMode();
-    this.showToast(this.state.viewMode === 'fit' ? 'Fit to Screen' : 'Fill View (Full Scale)');
+    if (this.isZooming) return;
+    this.handleGlobalDoubleTap(window.innerWidth / 2, window.innerHeight / 2, null);
   }
 
   /**
-   * Apply View Mode Scaling & Geometry (Centering in Middle of Screen)
+   * Update View Mode HUD Icons and text
+   */
+  updateViewModeHUD() {
+    const modeIconWrap = document.getElementById('view-mode-icon-wrap');
+    const modeText = document.getElementById('view-mode-text');
+    const drawerModeText = document.getElementById('drawer-viewmode-text');
+
+    if (this.state.viewMode === 'fit') {
+      if (modeIconWrap) {
+        modeIconWrap.innerHTML = `<i data-lucide="maximize-2" class="w-4 h-4 text-blue-400"></i>`;
+        if (window.lucide) {
+          try { lucide.createIcons({ root: modeIconWrap }); } catch (e) {}
+        }
+      }
+      if (modeText) modeText.textContent = 'Fill';
+      if (drawerModeText) drawerModeText.textContent = 'Fit View (Whole Screen)';
+    } else {
+      if (modeIconWrap) {
+        modeIconWrap.innerHTML = `<i data-lucide="minimize-2" class="w-4 h-4 text-blue-400"></i>`;
+        if (window.lucide) {
+          try { lucide.createIcons({ root: modeIconWrap }); } catch (e) {}
+        }
+      }
+      if (modeText) modeText.textContent = 'Fit';
+      if (drawerModeText) drawerModeText.textContent = 'Fill View (Full Scale)';
+    }
+  }
+
+  /**
+   * Apply View Mode Scaling & Geometry
    */
   applyViewMode() {
     const container = document.getElementById('mobile-timetable-container');
@@ -595,46 +667,31 @@ class MobileTimetableApp {
     if (!container || !stage) return;
 
     const poster = container.querySelector('.timetable-poster');
-    const modeIcon = document.getElementById('view-mode-icon');
-    const modeText = document.getElementById('view-mode-text');
-    const drawerModeText = document.getElementById('drawer-viewmode-text');
+    const posterW = 1400;
+    const posterH = poster ? poster.offsetHeight : 880;
+
+    const stageW = window.innerWidth;
+    const stageH = window.innerHeight;
+    const scaleX = (stageW - 32) / posterW;
+    const scaleY = (stageH - 32) / posterH;
+    const fitScale = Math.min(scaleX, scaleY, 0.98);
 
     if (this.state.viewMode === 'fit') {
-      // FIT MODE: Center in the dead middle of screen with zero overflow clipping
       stage.className = 'stage-mode-fit hide-scrollbar';
-
-      const stageW = window.innerWidth;
-      const stageH = window.innerHeight;
-      const posterW = 1400;
-      const posterH = poster ? poster.offsetHeight : 880;
-
-      const scaleX = (stageW - 32) / posterW;
-      const scaleY = (stageH - 32) / posterH;
-      const fitScale = Math.min(scaleX, scaleY, 0.98);
-
+      stage.scrollTo({ top: 0, left: 0 });
+      container.style.transition = 'none';
       container.style.transformOrigin = 'center center';
       container.style.transform = `scale(${fitScale})`;
       container.style.margin = '0 auto';
-
-      if (modeIcon) modeIcon.setAttribute('data-lucide', 'maximize-2');
-      if (modeText) modeText.textContent = 'Fill';
-      if (drawerModeText) drawerModeText.textContent = 'Fit View (Whole Screen)';
-
-      stage.scrollTo({ top: 0, left: 0 });
     } else {
-      // FILL MODE: Full 1:1 crisp pannable geometry
       stage.className = 'stage-mode-fill hide-scrollbar';
-
+      container.style.transition = 'none';
       container.style.transformOrigin = 'top center';
       container.style.transform = 'scale(1)';
       container.style.margin = '20px auto';
-
-      if (modeIcon) modeIcon.setAttribute('data-lucide', 'minimize-2');
-      if (modeText) modeText.textContent = 'Fit';
-      if (drawerModeText) drawerModeText.textContent = 'Fill View (Full Scale)';
     }
 
-    if (window.lucide) lucide.createIcons();
+    this.updateViewModeHUD();
   }
 
   /**
@@ -651,7 +708,7 @@ class MobileTimetableApp {
       orientation: this.state.orientation,
       theme: theme,
       showHeader: true,
-      showLegend: true,
+      showLegend: this.state.showFacultyDirectory,
       showTimeLabels: true,
       highlightLabs: true,
       cellPadding: 'normal',
@@ -659,7 +716,7 @@ class MobileTimetableApp {
       fontFamily: 'jakarta',
       showWatermark: true,
       canvasMargin: 'poster',
-      showFaculty: this.state.showFaculty
+      showFaculty: true
     }, false);
 
     // Apply View Mode scaling
@@ -673,48 +730,116 @@ class MobileTimetableApp {
   }
 
   /**
-   * Handle Double-Tap anywhere on the screen
+   * Handle Double-Tap anywhere on the screen with cinematic focal zoom
    */
   handleGlobalDoubleTap(clientX, clientY, card) {
+    if (this.isZooming) return;
     const stage = document.getElementById('mobile-fullscreen-stage');
-    
+    const container = document.getElementById('mobile-timetable-container');
+    if (!stage || !container) return;
+
+    const poster = container.querySelector('.timetable-poster');
+    const posterW = 1400;
+    const posterH = poster ? poster.offsetHeight : 880;
+
+    const stageW = window.innerWidth;
+    const stageH = window.innerHeight;
+    const scaleX = (stageW - 32) / posterW;
+    const scaleY = (stageH - 32) / posterH;
+    const fitScale = Math.min(scaleX, scaleY, 0.98);
+
+    // If tapping on a specific card, center directly on that card
+    if (card) {
+      const cardRect = card.getBoundingClientRect();
+      clientX = cardRect.left + (cardRect.width / 2);
+      clientY = cardRect.top + (cardRect.height / 2);
+    } else {
+      if (typeof clientX !== 'number' || isNaN(clientX) || clientX <= 0) {
+        clientX = stageW / 2;
+      }
+      if (typeof clientY !== 'number' || isNaN(clientY) || clientY <= 0) {
+        clientY = stageH / 2;
+      }
+    }
+
     if (this.state.viewMode === 'fit') {
-      // Zoom into Fill view and scroll to tapped location / card
+      // ==========================================
+      // ZOOM IN: Expand directly from Tap position
+      // ==========================================
+      this.isZooming = true;
       this.state.viewMode = 'fill';
-      this.applyViewMode();
+
+      // 1. Calculate focal point on poster from current Fit coordinates
+      const containerRect = container.getBoundingClientRect();
+      const relX = Math.max(0, Math.min(containerRect.width, clientX - containerRect.left));
+      const relY = Math.max(0, Math.min(containerRect.height, clientY - containerRect.top));
+      const pctX = (relX / Math.max(1, containerRect.width)) * 100;
+      const pctY = (relY / Math.max(1, containerRect.height)) * 100;
+
+      const focalX = (pctX / 100) * posterW;
+      const focalY = (pctY / 100) * posterH;
+
+      const targetScrollX = Math.max(0, Math.min(posterW - stageW, focalX - (stageW / 2)));
+      const targetScrollY = Math.max(0, Math.min(posterH - stageH, focalY - (stageH / 2)));
+
+      // 2. Prepare container for focal expansion
+      stage.className = 'stage-mode-fill hide-scrollbar';
+      stage.scrollLeft = targetScrollX;
+      stage.scrollTop = targetScrollY;
+
+      container.style.transformOrigin = `${pctX}% ${pctY}%`;
+      container.style.transition = 'none';
+      container.style.transform = `scale(${fitScale})`;
+      container.style.margin = '20px auto';
+
+      // Force layout reflow
+      void container.offsetHeight;
+
+      // 3. Smooth focal zoom-in spring curve
+      container.style.transition = 'transform 0.38s cubic-bezier(0.16, 1, 0.3, 1)';
+      container.style.transform = 'scale(1)';
+
+      this.updateViewModeHUD();
+      this.showToast('Zoomed in (Double Tap)');
 
       setTimeout(() => {
-        if (!stage) return;
-        if (card) {
-          const cardRect = card.getBoundingClientRect();
-          const stageRect = stage.getBoundingClientRect();
-          const targetLeft = stage.scrollLeft + (cardRect.left - stageRect.left) - (stageRect.width / 2) + (cardRect.width / 2);
-          const targetTop = stage.scrollTop + (cardRect.top - stageRect.top) - (stageRect.height / 2) + (cardRect.height / 2);
+        container.style.transition = 'none';
+        container.style.transform = 'scale(1)';
+        container.style.transformOrigin = 'top center';
+        this.isZooming = false;
+      }, 400);
 
-          stage.scrollTo({
-            left: Math.max(0, targetLeft),
-            top: Math.max(0, targetTop),
-            behavior: 'smooth'
-          });
-        } else {
-          const stageRect = stage.getBoundingClientRect();
-          const targetLeft = stage.scrollLeft + (clientX - stageRect.left) * 1.5 - (stageRect.width / 2);
-          const targetTop = stage.scrollTop + (clientY - stageRect.top) * 1.5 - (stageRect.height / 2);
-
-          stage.scrollTo({
-            left: Math.max(0, targetLeft),
-            top: Math.max(0, targetTop),
-            behavior: 'smooth'
-          });
-        }
-      }, 80);
-
-      this.showToast('Zoomed in (Double Tap)');
     } else {
-      // If already in Fill mode, double-tap toggles back to Fit view
+      // ==========================================
+      // ZOOM OUT: Collapse directly towards Tap position
+      // ==========================================
+      this.isZooming = true;
       this.state.viewMode = 'fit';
-      this.applyViewMode();
+
+      const currentScrollX = stage.scrollLeft;
+      const currentScrollY = stage.scrollTop;
+      const tappedX = currentScrollX + clientX;
+      const tappedY = currentScrollY + clientY;
+
+      const pctX = Math.max(0, Math.min(100, (tappedX / posterW) * 100));
+      const pctY = Math.max(0, Math.min(100, (tappedY / posterH) * 100));
+
+      container.style.transformOrigin = `${pctX}% ${pctY}%`;
+      container.style.transition = 'transform 0.38s cubic-bezier(0.16, 1, 0.3, 1)';
+      container.style.transform = `scale(${fitScale})`;
+
+      this.updateViewModeHUD();
       this.showToast('Fit to Screen (Double Tap)');
+
+      setTimeout(() => {
+        stage.className = 'stage-mode-fit hide-scrollbar';
+        stage.scrollTo({ top: 0, left: 0 });
+        container.style.transition = 'none';
+        container.style.transformOrigin = 'center center';
+        container.style.transform = `scale(${fitScale})`;
+        container.style.margin = '0 auto';
+        this.isZooming = false;
+      }, 400);
     }
   }
 
@@ -828,10 +953,10 @@ class MobileTimetableApp {
   }
 
   /**
-   * Render Theme Gallery inside drawer
+   * Render Theme Gallery inside theme modal
    */
   renderThemeGallery() {
-    const container = document.getElementById('drawer-theme-gallery');
+    const container = document.getElementById('theme-modal-list');
     if (!container || !window.THEMES) return;
 
     let html = '';
@@ -840,25 +965,28 @@ class MobileTimetableApp {
       html += `
         <button 
           type="button"
-          class="theme-card-drawer w-full text-left p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between active:scale-98 ${
-            isActive ? 'bg-blue-950/60 border-blue-500 shadow-md ring-1 ring-blue-500/50' : 'bg-slate-900 border-slate-800 hover:border-slate-700'
+          class="theme-card-picker w-full text-left p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between active:scale-98 ${
+            isActive ? 'bg-blue-950/70 border-blue-500 shadow-md ring-2 ring-blue-500/50' : 'bg-slate-900/90 border-slate-800 hover:border-slate-700'
           }"
           data-theme-id="${t.id}"
         >
-          <div class="flex items-center gap-2 pointer-events-none">
-            <div class="flex gap-0.5">
-              ${(t.preview || []).map(c => `<span class="w-3 h-3 rounded-full border border-black/20" style="background: ${c};"></span>`).join('')}
+          <div class="flex items-center gap-3 pointer-events-none">
+            <div class="flex gap-1 p-1 bg-slate-950/60 rounded-lg border border-white/5">
+              ${(t.preview || []).map(c => `<span class="w-3.5 h-3.5 rounded-full border border-black/30 shadow-sm" style="background: ${c};"></span>`).join('')}
             </div>
-            <div class="text-[11px] font-bold text-white">${t.name}</div>
+            <div>
+              <div class="text-xs font-bold text-white">${t.name}</div>
+              <div class="text-[10px] text-slate-400 font-medium line-clamp-1">${t.description || ''}</div>
+            </div>
           </div>
-          ${isActive ? '<span class="text-[10px] text-blue-400 font-bold pointer-events-none">Active ✓</span>' : ''}
+          ${isActive ? '<span class="text-xs text-blue-400 font-black pointer-events-none bg-blue-500/10 px-2 py-0.5 rounded-md border border-blue-500/30">Active ✓</span>' : ''}
         </button>
       `;
     });
 
     container.innerHTML = html;
 
-    container.querySelectorAll('.theme-card-drawer').forEach(btn => {
+    container.querySelectorAll('.theme-card-picker').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const themeId = btn.getAttribute('data-theme-id');
@@ -868,17 +996,34 @@ class MobileTimetableApp {
           this.renderThemeGallery();
           const themeObj = window.THEMES?.find(x => x.id === themeId);
           this.showToast(`Theme: ${themeObj?.name || themeId}`, 'success');
+
+          // Auto close theme modal after brief visual confirmation
+          setTimeout(() => {
+            const themeModal = document.getElementById('theme-modal');
+            themeModal?.classList.add('hidden');
+            themeModal?.classList.remove('flex');
+          }, 180);
         }
       });
     });
   }
 
   /**
-   * Apply Theme
+   * Apply Theme and update page background
    */
   applyTheme(themeId) {
     this.state.themeId = themeId;
     localStorage.setItem('ttstudio_mobile_theme', themeId);
+
+    const themeObj = window.getTheme ? window.getTheme(themeId) : (window.THEMES?.find(t => t.id === themeId) || window.THEMES?.[0]);
+    if (themeObj) {
+      const nameEl = document.getElementById('drawer-theme-name');
+      if (nameEl) nameEl.textContent = themeObj.name;
+
+      if (themeObj.styles?.bg) {
+        document.body.style.background = themeObj.styles.bg;
+      }
+    }
   }
 
   // =========================================================================
