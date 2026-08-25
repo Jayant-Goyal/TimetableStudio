@@ -3,7 +3,7 @@
  * Full offline caching for PWA on Android
  */
 
-const CACHE_NAME = 'ttstudio-mobile-v2';
+const CACHE_NAME = 'ttstudio-mobile-v3';
 const CORE_ASSETS = [
   './index.html',
   './manifest.json',

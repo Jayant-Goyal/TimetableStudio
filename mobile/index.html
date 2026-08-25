@@ -87,41 +87,18 @@
       box-sizing: border-box;
       touch-action: pan-x pan-y pinch-zoom;
       position: relative;
-    }
-
-    /* FIT MODE: Height-Fit View (Height matches 100% of display height, horizontal pan across days) */
-    #mobile-fullscreen-stage.stage-mode-fit {
-      display: block;
-      overflow-x: auto;
-      overflow-y: hidden;
-      -webkit-overflow-scrolling: touch;
-      padding: 0;
-      margin: 0;
-    }
-
-    /* FILL MODE: 1:1 Scale Pannable View (Free pan in both directions) */
-    #mobile-fullscreen-stage.stage-mode-fill {
-      display: block;
       overflow: auto;
       -webkit-overflow-scrolling: touch;
-      padding: 0;
-      margin: 0;
-    }
-
-    /* ZOOM MODE: Detail Close-up */
-    #mobile-fullscreen-stage.stage-mode-zoom {
-      display: block;
-      overflow: auto;
-      -webkit-overflow-scrolling: touch;
-      padding: 0;
-      margin: 0;
+      background: transparent;
     }
 
     #mobile-timetable-container {
       width: 1400px;
       min-width: 1400px;
-      margin: 0 auto;
-      transition: transform 0.28s cubic-bezier(0.2, 0, 0, 1), opacity 0.2s ease;
+      margin: 0;
+      padding: 0;
+      transform-origin: top left;
+      transition: transform 0.3s cubic-bezier(0.2, 0, 0, 1), opacity 0.2s ease;
     }
 
     /* Interactive Class Card Styling */

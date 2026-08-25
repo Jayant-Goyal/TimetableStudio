@@ -330,9 +330,13 @@ class MobileTimetableApp {
     let isPinching = false;
     const DRAG_THRESHOLD = 10; // px
 
-    // Touch Event Tracking on Stage (Distinguish Drag/Scroll vs Tap on timetable canvas ONLY)
+    // Touch Event Tracking & Pinch-to-Zoom on Stage
     let lastTouchClientX = window.innerWidth / 2;
     let lastTouchClientY = window.innerHeight / 2;
+    let initialPinchDistance = 0;
+    let initialScaleOnPinch = 1.0;
+    let pinchMidX = window.innerWidth / 2;
+    let pinchMidY = window.innerHeight / 2;
 
     stage?.addEventListener('touchstart', (e) => {
       this.enableFullscreen();
@@ -343,9 +347,15 @@ class MobileTimetableApp {
         lastTouchClientY = e.touches[0].clientY;
         isDragging = false;
         isPinching = false;
-      } else if (e.touches.length > 1) {
+      } else if (e.touches.length === 2) {
         isPinching = true;
         isDragging = true;
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        initialPinchDistance = Math.hypot(dx, dy);
+        initialScaleOnPinch = this.state.currentScale || this.getHeightFitScale();
+        pinchMidX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+        pinchMidY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
       }
     }, { passive: true });
 
@@ -356,10 +366,21 @@ class MobileTimetableApp {
         if (Math.hypot(dx, dy) > DRAG_THRESHOLD) {
           isDragging = true;
         }
+      } else if (e.touches.length === 2 && initialPinchDistance > 10) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const currentDistance = Math.hypot(dx, dy);
+        const pinchRatio = currentDistance / initialPinchDistance;
+        const fitScale = this.getHeightFitScale();
+        const newScale = Math.max(fitScale * 0.7, Math.min(3.0, initialScaleOnPinch * pinchRatio));
+        this.zoomTo(newScale, pinchMidX, pinchMidY, false);
       }
     }, { passive: true });
 
     stage?.addEventListener('touchend', (e) => {
+      if (e.touches.length < 2 && initialPinchDistance > 0) {
+        initialPinchDistance = 0;
+      }
       if (isDragging || isPinching) {
         wasDragging = true;
         if (wasDraggingTimer) clearTimeout(wasDraggingTimer);
@@ -420,7 +441,7 @@ class MobileTimetableApp {
     // 4. Resize listener for Fit mode adjustment
     window.addEventListener('resize', () => {
       if (this.state.viewMode === 'fit') {
-        this.applyViewMode();
+        this.applyViewMode(false);
       }
     });
 
@@ -449,7 +470,7 @@ class MobileTimetableApp {
           clearTimeout(stageSingleTapTimer);
           stageSingleTapTimer = null;
         }
-        this.handleGlobalDoubleTap(tapX, tapY, card);
+        this.handleDoubleTap(tapX, tapY, card);
       } else {
         // === POTENTIAL SINGLE TAP ===
         stageLastTapTime = now;
@@ -629,17 +650,150 @@ class MobileTimetableApp {
   }
 
   /**
-   * Toggle View Mode (Fill vs Fit) with center focal zoom
+   * Calculate exact Height-Fit scale factor (fits 100% of display height)
    */
-  toggleViewMode() {
-    if (this.isZooming) return;
-    this.handleGlobalDoubleTap(window.innerWidth / 2, window.innerHeight / 2, null);
+  getHeightFitScale() {
+    const container = document.getElementById('mobile-timetable-container');
+    const poster = container?.querySelector('.timetable-poster') || container;
+    const posterH = poster ? poster.offsetHeight || 880 : 880;
+    const displayH = window.innerHeight;
+    return displayH / posterH;
   }
 
   /**
-   * Update View Mode HUD Icons and text
+   * Direct focal zoom engine
    */
-  updateViewModeHUD() {
+  zoomTo(targetScale, focalX = null, focalY = null, animate = true) {
+    const stage = document.getElementById('mobile-fullscreen-stage');
+    const container = document.getElementById('mobile-timetable-container');
+    if (!stage || !container) return;
+
+    if (focalX === null) focalX = window.innerWidth / 2;
+    if (focalY === null) focalY = window.innerHeight / 2;
+
+    const posterW = 1400;
+    const poster = container.querySelector('.timetable-poster');
+    const posterH = poster ? poster.offsetHeight || 880 : 880;
+
+    const currentScale = this.state.currentScale || this.getHeightFitScale();
+
+    // Map screen focal coordinate to unscaled poster coordinate
+    const unscaledPosterX = (stage.scrollLeft + focalX) / currentScale;
+    const unscaledPosterY = (stage.scrollTop + focalY) / currentScale;
+
+    // Calculate new scroll offset to keep focal point anchored
+    const targetScrollX = (unscaledPosterX * targetScale) - focalX;
+    const targetScrollY = (unscaledPosterY * targetScale) - focalY;
+
+    const maxScrollX = Math.max(0, (posterW * targetScale) - window.innerWidth);
+    const maxScrollY = Math.max(0, (posterH * targetScale) - window.innerHeight);
+
+    const clampedScrollX = Math.max(0, Math.min(maxScrollX, targetScrollX));
+    const clampedScrollY = Math.max(0, Math.min(maxScrollY, targetScrollY));
+
+    this.state.currentScale = targetScale;
+
+    // Adjust container margin compensation so scroll container dimensions match exact scaled pixels
+    container.style.marginRight = `${(posterW * targetScale) - posterW}px`;
+    container.style.marginBottom = `${(posterH * targetScale) - posterH}px`;
+    container.style.marginLeft = '0px';
+    container.style.marginTop = '0px';
+
+    if (animate) {
+      this.isAnimating = true;
+      container.style.transition = 'transform 0.32s cubic-bezier(0.2, 0, 0, 1)';
+      container.style.transform = `scale(${targetScale})`;
+
+      stage.scrollTo({
+        left: clampedScrollX,
+        top: clampedScrollY,
+        behavior: 'smooth'
+      });
+
+      setTimeout(() => {
+        container.style.transition = 'none';
+        this.isAnimating = false;
+      }, 340);
+    } else {
+      container.style.transition = 'none';
+      container.style.transform = `scale(${targetScale})`;
+      stage.scrollLeft = clampedScrollX;
+      stage.scrollTop = clampedScrollY;
+    }
+
+    this.updateHUDLabels();
+  }
+
+  /**
+   * Double-Tap anywhere on the canvas
+   */
+  handleDoubleTap(tapX, tapY, cardElement) {
+    if (this.isAnimating) return;
+
+    if (cardElement) {
+      const rect = cardElement.getBoundingClientRect();
+      tapX = rect.left + rect.width / 2;
+      tapY = rect.top + rect.height / 2;
+    }
+
+    const fitScale = this.getHeightFitScale();
+
+    if (this.state.viewMode === 'fit') {
+      this.state.viewMode = 'fill';
+      localStorage.setItem('ttstudio_mobile_view_mode', 'fill');
+      this.zoomTo(1.0, tapX, tapY, true);
+      this.showToast('Fill View (1:1 Full Scale)');
+    } else if (this.state.viewMode === 'fill' && cardElement) {
+      this.state.viewMode = 'zoom';
+      localStorage.setItem('ttstudio_mobile_view_mode', 'zoom');
+      this.zoomTo(1.75, tapX, tapY, true);
+      this.showToast('Detail Zoom (1.75x)');
+    } else {
+      this.state.viewMode = 'fit';
+      localStorage.setItem('ttstudio_mobile_view_mode', 'fit');
+      this.zoomTo(fitScale, tapX, tapY, true);
+      this.showToast('Height-Fit (100% Display)');
+    }
+  }
+
+  /**
+   * Toggle View Mode (from button)
+   */
+  toggleViewMode() {
+    if (this.isAnimating) return;
+    const fitScale = this.getHeightFitScale();
+
+    if (this.state.viewMode === 'fit') {
+      this.state.viewMode = 'fill';
+      localStorage.setItem('ttstudio_mobile_view_mode', 'fill');
+      this.zoomTo(1.0, window.innerWidth / 2, window.innerHeight / 2, true);
+      this.showToast('Fill View (1:1 Full Scale)');
+    } else {
+      this.state.viewMode = 'fit';
+      localStorage.setItem('ttstudio_mobile_view_mode', 'fit');
+      this.zoomTo(fitScale, window.innerWidth / 2, window.innerHeight / 2, true);
+      this.showToast('Height-Fit (100% Display)');
+    }
+  }
+
+  /**
+   * Apply View Mode
+   */
+  applyViewMode(animate = false) {
+    if (this.state.viewMode === 'fit') {
+      const fitScale = this.getHeightFitScale();
+      this.zoomTo(fitScale, window.innerWidth / 2, window.innerHeight / 2, animate);
+    } else if (this.state.viewMode === 'zoom') {
+      this.zoomTo(1.75, window.innerWidth / 2, window.innerHeight / 2, animate);
+    } else {
+      this.zoomTo(1.0, window.innerWidth / 2, window.innerHeight / 2, animate);
+    }
+  }
+
+  /**
+   * Update HUD labels
+   */
+  updateHUDLabels() {
     const modeIconWrap = document.getElementById('view-mode-icon-wrap');
     const modeText = document.getElementById('view-mode-text');
     const drawerModeText = document.getElementById('drawer-viewmode-text');
@@ -652,7 +806,7 @@ class MobileTimetableApp {
         }
       }
       if (modeText) modeText.textContent = 'Fill';
-      if (drawerModeText) drawerModeText.textContent = 'Height-Fit View (100% Display)';
+      if (drawerModeText) drawerModeText.textContent = 'Height-Fit (100% Height)';
     } else if (this.state.viewMode === 'zoom') {
       if (modeIconWrap) {
         modeIconWrap.innerHTML = `<i data-lucide="minimize-2" class="w-4 h-4 text-purple-400"></i>`;
@@ -661,7 +815,7 @@ class MobileTimetableApp {
         }
       }
       if (modeText) modeText.textContent = 'Fit';
-      if (drawerModeText) drawerModeText.textContent = 'Detail Zoom (1.6x)';
+      if (drawerModeText) drawerModeText.textContent = 'Detail Zoom (1.75x)';
     } else {
       if (modeIconWrap) {
         modeIconWrap.innerHTML = `<i data-lucide="minimize-2" class="w-4 h-4 text-blue-400"></i>`;
@@ -670,66 +824,12 @@ class MobileTimetableApp {
         }
       }
       if (modeText) modeText.textContent = 'Fit';
-      if (drawerModeText) drawerModeText.textContent = 'Fill View (1:1 Full Scale)';
+      if (drawerModeText) drawerModeText.textContent = 'Fill View (1:1 Scale)';
     }
   }
 
   /**
-   * Apply View Mode Scaling & Geometry (Height-Fit vs 1:1 Fill vs Detail Zoom)
-   */
-  applyViewMode() {
-    const container = document.getElementById('mobile-timetable-container');
-    const stage = document.getElementById('mobile-fullscreen-stage');
-    if (!container || !stage) return;
-
-    const poster = container.querySelector('.timetable-poster');
-    const posterW = 1400;
-    const posterH = poster ? poster.offsetHeight : 880;
-
-    const stageW = window.innerWidth;
-    const stageH = window.innerHeight;
-
-    // FIT MODE: Height of the timetable matches 100% of display height
-    const heightFitScale = stageH / posterH;
-
-    if (this.state.viewMode === 'fit') {
-      stage.className = 'stage-mode-fit hide-scrollbar';
-      container.style.transition = 'none';
-      container.style.transformOrigin = 'top left';
-      container.style.transform = `scale(${heightFitScale})`;
-      container.style.marginRight = `${(posterW * heightFitScale) - posterW}px`;
-      container.style.marginBottom = `${(posterH * heightFitScale) - posterH}px`;
-      container.style.marginLeft = '0';
-      container.style.marginTop = '0';
-      stage.scrollTop = 0;
-    } else if (this.state.viewMode === 'zoom') {
-      // DETAIL ZOOM (1.6x scale)
-      const zoomScale = 1.6;
-      stage.className = 'stage-mode-zoom hide-scrollbar';
-      container.style.transition = 'none';
-      container.style.transformOrigin = 'top left';
-      container.style.transform = `scale(${zoomScale})`;
-      container.style.marginRight = `${(posterW * zoomScale) - posterW}px`;
-      container.style.marginBottom = `${(posterH * zoomScale) - posterH}px`;
-      container.style.marginLeft = '0';
-      container.style.marginTop = '0';
-    } else {
-      // FILL MODE (1:1 full scale)
-      stage.className = 'stage-mode-fill hide-scrollbar';
-      container.style.transition = 'none';
-      container.style.transformOrigin = 'top left';
-      container.style.transform = 'scale(1)';
-      container.style.marginRight = '0px';
-      container.style.marginBottom = '0px';
-      container.style.marginLeft = '0';
-      container.style.marginTop = '0';
-    }
-
-    this.updateViewModeHUD();
-  }
-
-  /**
-   * Render Fullscreen Vector Timetable
+   * Render Fullscreen Vector Timetable (100% Edge-to-Edge with 0px margins)
    */
   renderTimetable() {
     const container = document.getElementById('mobile-timetable-container');
@@ -737,7 +837,7 @@ class MobileTimetableApp {
 
     const theme = window.getTheme(this.state.themeId);
 
-    // Render using official renderer with full vector precision
+    // Render using official renderer with full vector precision & canvasMargin: 'none' for 0px notch immersion
     window.TimetableRenderer.render(container, this.state.parsedData, this.state.grid, {
       orientation: this.state.orientation,
       theme: theme,
@@ -746,166 +846,20 @@ class MobileTimetableApp {
       showTimeLabels: true,
       highlightLabs: true,
       cellPadding: 'normal',
-      borderRadius: 'rounded',
+      borderRadius: 'square',
       fontFamily: 'jakarta',
       showWatermark: true,
-      canvasMargin: 'poster',
+      canvasMargin: 'none', // 0px margin, 0px padding, 0px border-radius: extends under notch!
       showFaculty: true
     }, false);
 
     // Apply View Mode scaling
-    this.applyViewMode();
+    this.applyViewMode(false);
     this.updateFacultyDrawerUI();
 
     // Reapply spotlight if active
     if (this.state.spotlightSubject) {
       this.applySpotlightClasses();
-    }
-  }
-
-  /**
-   * Handle Double-Tap anywhere on the screen with cinematic focal zoom
-   */
-  handleGlobalDoubleTap(clientX, clientY, card) {
-    if (this.isZooming) return;
-    const stage = document.getElementById('mobile-fullscreen-stage');
-    const container = document.getElementById('mobile-timetable-container');
-    if (!stage || !container) return;
-
-    const poster = container.querySelector('.timetable-poster');
-    const posterW = 1400;
-    const posterH = poster ? poster.offsetHeight : 880;
-
-    const stageW = window.innerWidth;
-    const stageH = window.innerHeight;
-    const heightFitScale = stageH / posterH;
-
-    // If tapping on a specific card, center directly on that card
-    if (card) {
-      const cardRect = card.getBoundingClientRect();
-      clientX = cardRect.left + (cardRect.width / 2);
-      clientY = cardRect.top + (cardRect.height / 2);
-    } else {
-      if (typeof clientX !== 'number' || isNaN(clientX) || clientX <= 0) {
-        clientX = stageW / 2;
-      }
-      if (typeof clientY !== 'number' || isNaN(clientY) || clientY <= 0) {
-        clientY = stageH / 2;
-      }
-    }
-
-    if (this.state.viewMode === 'fit') {
-      // ==========================================
-      // STEP 1: Zoom from Height-Fit -> 1:1 Fill View
-      // ==========================================
-      this.isZooming = true;
-      this.state.viewMode = 'fill';
-
-      // Current position in Height-Fit view:
-      const currentScrollX = stage.scrollLeft;
-      const unscaledTappedX = (currentScrollX + clientX) / heightFitScale;
-      const unscaledTappedY = clientY / heightFitScale;
-
-      const pctX = Math.max(0, Math.min(100, (unscaledTappedX / posterW) * 100));
-      const pctY = Math.max(0, Math.min(100, (unscaledTappedY / posterH) * 100));
-
-      const targetScrollX = Math.max(0, Math.min(posterW - stageW, unscaledTappedX - (stageW / 2)));
-      const targetScrollY = Math.max(0, Math.min(posterH - stageH, unscaledTappedY - (stageH / 2)));
-
-      stage.className = 'stage-mode-fill hide-scrollbar';
-      stage.scrollLeft = targetScrollX;
-      stage.scrollTop = targetScrollY;
-
-      container.style.transformOrigin = `${pctX}% ${pctY}%`;
-      container.style.transition = 'none';
-      container.style.transform = `scale(${heightFitScale})`;
-      container.style.marginRight = '0px';
-      container.style.marginBottom = '0px';
-
-      void container.offsetHeight; // force reflow
-
-      container.style.transition = 'transform 0.36s cubic-bezier(0.16, 1, 0.3, 1)';
-      container.style.transform = 'scale(1)';
-
-      this.updateViewModeHUD();
-      this.showToast('Fill View (1:1 Scale)');
-
-      setTimeout(() => {
-        this.applyViewMode();
-        this.isZooming = false;
-      }, 380);
-
-    } else if (this.state.viewMode === 'fill' && card) {
-      // ==========================================
-      // STEP 2: Zoom from 1:1 Fill -> 1.6x Detail View (if double-tapping a card)
-      // ==========================================
-      this.isZooming = true;
-      this.state.viewMode = 'zoom';
-      const zoomScale = 1.6;
-
-      const currentScrollX = stage.scrollLeft;
-      const currentScrollY = stage.scrollTop;
-      const unscaledTappedX = currentScrollX + clientX;
-      const unscaledTappedY = currentScrollY + clientY;
-
-      const pctX = Math.max(0, Math.min(100, (unscaledTappedX / posterW) * 100));
-      const pctY = Math.max(0, Math.min(100, (unscaledTappedY / posterH) * 100));
-
-      const targetScrollX = Math.max(0, Math.min((posterW * zoomScale) - stageW, (unscaledTappedX * zoomScale) - (stageW / 2)));
-      const targetScrollY = Math.max(0, Math.min((posterH * zoomScale) - stageH, (unscaledTappedY * zoomScale) - (stageH / 2)));
-
-      stage.className = 'stage-mode-zoom hide-scrollbar';
-      stage.scrollLeft = targetScrollX;
-      stage.scrollTop = targetScrollY;
-
-      container.style.transformOrigin = `${pctX}% ${pctY}%`;
-      container.style.transition = 'none';
-      container.style.transform = 'scale(1)';
-      container.style.marginRight = `${(posterW * zoomScale) - posterW}px`;
-      container.style.marginBottom = `${(posterH * zoomScale) - posterH}px`;
-
-      void container.offsetHeight;
-
-      container.style.transition = 'transform 0.36s cubic-bezier(0.16, 1, 0.3, 1)';
-      container.style.transform = `scale(${zoomScale})`;
-
-      this.updateViewModeHUD();
-      this.showToast('Detail Zoom (1.6x)');
-
-      setTimeout(() => {
-        this.applyViewMode();
-        this.isZooming = false;
-      }, 380);
-
-    } else {
-      // ==========================================
-      // STEP 3: Collapse back to Height-Fit View (100% Display Height)
-      // ==========================================
-      this.isZooming = true;
-      this.state.viewMode = 'fit';
-
-      const currentScrollX = stage.scrollLeft;
-      const currentScrollY = stage.scrollTop;
-      const currentScale = this.state.viewMode === 'zoom' ? 1.6 : 1.0;
-      const unscaledTappedX = (currentScrollX + clientX) / currentScale;
-      const unscaledTappedY = (currentScrollY + clientY) / currentScale;
-
-      const pctX = Math.max(0, Math.min(100, (unscaledTappedX / posterW) * 100));
-      const pctY = Math.max(0, Math.min(100, (unscaledTappedY / posterH) * 100));
-
-      container.style.transformOrigin = `${pctX}% ${pctY}%`;
-      container.style.transition = 'transform 0.36s cubic-bezier(0.16, 1, 0.3, 1)';
-      container.style.transform = `scale(${heightFitScale})`;
-
-      this.updateViewModeHUD();
-      this.showToast('Height-Fit (100% Display)');
-
-      setTimeout(() => {
-        this.applyViewMode();
-        const finalScrollX = Math.max(0, Math.min((posterW * heightFitScale) - stageW, (unscaledTappedX * heightFitScale) - (stageW / 2)));
-        stage.scrollLeft = finalScrollX;
-        this.isZooming = false;
-      }, 380);
     }
   }
 
@@ -1088,6 +1042,8 @@ class MobileTimetableApp {
 
       if (themeObj.styles?.bg) {
         document.body.style.background = themeObj.styles.bg;
+        const metaTheme = document.querySelector('meta[name="theme-color"]');
+        if (metaTheme) metaTheme.setAttribute('content', themeObj.styles.bg);
       }
     }
   }
