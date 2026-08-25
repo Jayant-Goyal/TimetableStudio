@@ -403,6 +403,29 @@ class TimetableApp {
       this.showToast('Loaded AI & Data Science Institute dataset', 'info');
     });
 
+    // 7.5. GitHub Timetable Fetcher (FriendAvailabilityTracker)
+    document.getElementById('github-load-btn')?.addEventListener('click', async () => {
+      const select = document.getElementById('github-timetable-select');
+      const filename = select?.value || 'DF.json';
+      const url = `https://raw.githubusercontent.com/Jayant-Goyal/FriendAvailabilityTracker/main/TimeTables/${filename}`;
+      
+      const btn = document.getElementById('github-load-btn');
+      if (btn) btn.innerHTML = `<div class="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div><span>Loading...</span>`;
+      
+      try {
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const text = await resp.text();
+        this.loadJsonData(text);
+        this.showToast(`Loaded ${filename} from GitHub!`, 'success');
+      } catch (err) {
+        this.showToast(`GitHub fetch failed: ${err.message}`, 'error');
+      } finally {
+        if (btn) btn.innerHTML = `<i data-lucide="download" class="w-3.5 h-3.5"></i><span>Load</span>`;
+        if (window.lucide) lucide.createIcons({ root: btn });
+      }
+    });
+
     // 8. File Upload
     document.getElementById('json-file-input')?.addEventListener('change', (e) => {
       const file = e.target.files?.[0];

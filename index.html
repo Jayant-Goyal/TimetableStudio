@@ -311,6 +311,32 @@
             </div>
           </div>
 
+          <!-- GitHub Cloud Timetables -->
+          <div class="space-y-1.5 bg-slate-900/50 p-3 rounded-xl border border-slate-800">
+            <div class="flex items-center justify-between text-xs font-black uppercase tracking-wider text-slate-400">
+              <div class="flex items-center gap-1.5 text-blue-400">
+                <i data-lucide="cloud" class="w-3.5 h-3.5"></i>
+                <span>GitHub Repository</span>
+              </div>
+              <span class="text-[10px] text-slate-400 font-semibold lowercase">FriendAvailabilityTracker</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <select id="github-timetable-select" class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-200 focus:border-blue-500 focus:outline-hidden">
+                <option value="DF.json">Section DF (JECRC CSE)</option>
+                <option value="DG.json">Section DG (JECRC CSE)</option>
+                <option value="DH.json">Section DH (JECRC CSE)</option>
+              </select>
+              <button 
+                id="github-load-btn"
+                class="px-3 py-1.5 text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition-all shadow-sm active:scale-95 flex items-center gap-1 shrink-0"
+                title="Fetch from GitHub"
+              >
+                <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                <span>Load</span>
+              </button>
+            </div>
+          </div>
+
           <!-- File Upload & Prettify -->
           <div class="flex items-center gap-2">
             <label class="flex-1 px-3 py-1.5 text-xs font-bold bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-slate-300 flex items-center justify-center gap-1.5 cursor-pointer transition-all">

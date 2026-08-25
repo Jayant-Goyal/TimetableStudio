@@ -10,7 +10,7 @@ class MobileTimetableApp {
       grid: null,
       themeId: localStorage.getItem('ttstudio_mobile_theme') || 'cyberpunk-neon',
       orientation: localStorage.getItem('ttstudio_mobile_orientation') || 'periods-in-rows',
-      viewMode: 'fill', // 'fill' (default pannable) or 'fit' (whole screen)
+      viewMode: localStorage.getItem('ttstudio_mobile_view_mode') || 'fit', // Default: 'fit' (Height-Fit view), remembers last used
       showFacultyDirectory: localStorage.getItem('ttstudio_show_faculty_directory') !== 'false',
       attendance: this.loadAttendanceState(),
       spotlightSubject: null,
@@ -260,6 +260,27 @@ class MobileTimetableApp {
       if (e.target === themeModal) {
         themeModal.classList.add('hidden');
         themeModal.classList.remove('flex');
+      }
+    });
+
+    // Online Timetables (GitHub) modal
+    const ttModal = document.getElementById('timetables-modal');
+    document.getElementById('drawer-cloud-timetables-btn')?.addEventListener('click', () => {
+      this.fetchOnlineTimetables(false);
+      ttModal?.classList.remove('hidden');
+      ttModal?.classList.add('flex');
+    });
+    document.getElementById('timetables-modal-close')?.addEventListener('click', () => {
+      ttModal?.classList.add('hidden');
+      ttModal?.classList.remove('flex');
+    });
+    document.getElementById('timetables-modal-refresh-btn')?.addEventListener('click', () => {
+      this.fetchOnlineTimetables(true);
+    });
+    ttModal?.addEventListener('click', (e) => {
+      if (e.target === ttModal) {
+        ttModal.classList.add('hidden');
+        ttModal.classList.remove('flex');
       }
     });
 
@@ -565,14 +586,16 @@ class MobileTimetableApp {
   }
 
   /**
-   * Request Android Immersive Fullscreen Mode safely
+   * Request Android Immersive Fullscreen Mode (Hides Navigation Bar)
    */
   enableFullscreen() {
-    if (this.fullscreenRequested) return;
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.matchMedia('(display-mode: fullscreen)').matches || window.navigator.standalone;
-    if (!isStandalone && !document.fullscreenElement && document.documentElement.requestFullscreen) {
-      this.fullscreenRequested = true;
-      document.documentElement.requestFullscreen().catch(() => {});
+    if (document.fullscreenElement) return;
+    const docEl = document.documentElement;
+    const requestMethod = docEl.requestFullscreen || docEl.webkitRequestFullscreen || docEl.mozRequestFullScreen || docEl.msRequestFullscreen;
+    if (requestMethod) {
+      requestMethod.call(docEl, { navigationUI: 'hide' }).catch(() => {
+        try { requestMethod.call(docEl); } catch (e) {}
+      });
     }
   }
 
@@ -650,7 +673,7 @@ class MobileTimetableApp {
   }
 
   /**
-   * Calculate exact Height-Fit scale factor (fits 100% of display height)
+   * Calculate exact Height-Fit scale factor (fits 100% of display height, scroll days horizontally)
    */
   getHeightFitScale() {
     const container = document.getElementById('mobile-timetable-container');
@@ -658,6 +681,19 @@ class MobileTimetableApp {
     const posterH = poster ? poster.offsetHeight || 880 : 880;
     const displayH = window.innerHeight;
     return displayH / posterH;
+  }
+
+  /**
+   * Calculate exact Full Overview scale (fits 100% of entire timetable on one screen)
+   */
+  getOverviewScale() {
+    const container = document.getElementById('mobile-timetable-container');
+    const poster = container?.querySelector('.timetable-poster') || container;
+    const posterW = 1400;
+    const posterH = poster ? poster.offsetHeight || 880 : 880;
+    const displayW = window.innerWidth;
+    const displayH = window.innerHeight;
+    return Math.min(displayW / posterW, displayH / posterH);
   }
 
   /**
@@ -738,7 +774,7 @@ class MobileTimetableApp {
 
     const fitScale = this.getHeightFitScale();
 
-    if (this.state.viewMode === 'fit') {
+    if (this.state.viewMode === 'fit' || this.state.viewMode === 'overview') {
       this.state.viewMode = 'fill';
       localStorage.setItem('ttstudio_mobile_view_mode', 'fill');
       this.zoomTo(1.0, tapX, tapY, true);
@@ -752,18 +788,23 @@ class MobileTimetableApp {
       this.state.viewMode = 'fit';
       localStorage.setItem('ttstudio_mobile_view_mode', 'fit');
       this.zoomTo(fitScale, tapX, tapY, true);
-      this.showToast('Height-Fit (100% Display)');
+      this.showToast('Height-Fit (Default)');
     }
   }
 
   /**
-   * Toggle View Mode (from button)
+   * Toggle View Mode (Cycles: Height-Fit -> Full Overview -> 1:1 Fill -> Height-Fit)
    */
   toggleViewMode() {
     if (this.isAnimating) return;
-    const fitScale = this.getHeightFitScale();
 
     if (this.state.viewMode === 'fit') {
+      this.state.viewMode = 'overview';
+      localStorage.setItem('ttstudio_mobile_view_mode', 'overview');
+      const overviewScale = this.getOverviewScale();
+      this.zoomTo(overviewScale, window.innerWidth / 2, window.innerHeight / 2, true);
+      this.showToast('Full Overview (1 Screen)');
+    } else if (this.state.viewMode === 'overview') {
       this.state.viewMode = 'fill';
       localStorage.setItem('ttstudio_mobile_view_mode', 'fill');
       this.zoomTo(1.0, window.innerWidth / 2, window.innerHeight / 2, true);
@@ -771,8 +812,9 @@ class MobileTimetableApp {
     } else {
       this.state.viewMode = 'fit';
       localStorage.setItem('ttstudio_mobile_view_mode', 'fit');
+      const fitScale = this.getHeightFitScale();
       this.zoomTo(fitScale, window.innerWidth / 2, window.innerHeight / 2, true);
-      this.showToast('Height-Fit (100% Display)');
+      this.showToast('Height-Fit View (Default)');
     }
   }
 
@@ -780,18 +822,23 @@ class MobileTimetableApp {
    * Apply View Mode
    */
   applyViewMode(animate = false) {
-    if (this.state.viewMode === 'fit') {
-      const fitScale = this.getHeightFitScale();
-      this.zoomTo(fitScale, window.innerWidth / 2, window.innerHeight / 2, animate);
+    if (this.state.viewMode === 'overview') {
+      const overviewScale = this.getOverviewScale();
+      this.zoomTo(overviewScale, window.innerWidth / 2, window.innerHeight / 2, animate);
     } else if (this.state.viewMode === 'zoom') {
       this.zoomTo(1.75, window.innerWidth / 2, window.innerHeight / 2, animate);
-    } else {
+    } else if (this.state.viewMode === 'fill') {
       this.zoomTo(1.0, window.innerWidth / 2, window.innerHeight / 2, animate);
+    } else {
+      // Default: 'fit' (Height-Fit)
+      this.state.viewMode = 'fit';
+      const fitScale = this.getHeightFitScale();
+      this.zoomTo(fitScale, window.innerWidth / 2, window.innerHeight / 2, animate);
     }
   }
 
   /**
-   * Update HUD labels
+   * Update HUD labels & Icons
    */
   updateHUDLabels() {
     const modeIconWrap = document.getElementById('view-mode-icon-wrap');
@@ -800,13 +847,22 @@ class MobileTimetableApp {
 
     if (this.state.viewMode === 'fit') {
       if (modeIconWrap) {
-        modeIconWrap.innerHTML = `<i data-lucide="maximize-2" class="w-4 h-4 text-blue-400"></i>`;
+        modeIconWrap.innerHTML = `<i data-lucide="layout-grid" class="w-4 h-4 text-blue-400"></i>`;
+        if (window.lucide) {
+          try { lucide.createIcons({ root: modeIconWrap }); } catch (e) {}
+        }
+      }
+      if (modeText) modeText.textContent = 'Overview';
+      if (drawerModeText) drawerModeText.textContent = 'Height-Fit View (Default)';
+    } else if (this.state.viewMode === 'overview') {
+      if (modeIconWrap) {
+        modeIconWrap.innerHTML = `<i data-lucide="maximize" class="w-4 h-4 text-emerald-400"></i>`;
         if (window.lucide) {
           try { lucide.createIcons({ root: modeIconWrap }); } catch (e) {}
         }
       }
       if (modeText) modeText.textContent = 'Fill';
-      if (drawerModeText) drawerModeText.textContent = 'Height-Fit (100% Height)';
+      if (drawerModeText) drawerModeText.textContent = 'Full Timetable Overview (1 Screen)';
     } else if (this.state.viewMode === 'zoom') {
       if (modeIconWrap) {
         modeIconWrap.innerHTML = `<i data-lucide="minimize-2" class="w-4 h-4 text-purple-400"></i>`;
@@ -817,6 +873,7 @@ class MobileTimetableApp {
       if (modeText) modeText.textContent = 'Fit';
       if (drawerModeText) drawerModeText.textContent = 'Detail Zoom (1.75x)';
     } else {
+      // 'fill'
       if (modeIconWrap) {
         modeIconWrap.innerHTML = `<i data-lucide="minimize-2" class="w-4 h-4 text-blue-400"></i>`;
         if (window.lucide) {
@@ -825,6 +882,135 @@ class MobileTimetableApp {
       }
       if (modeText) modeText.textContent = 'Fit';
       if (drawerModeText) drawerModeText.textContent = 'Fill View (1:1 Scale)';
+    }
+  }
+
+  /**
+   * Fetch online timetables from GitHub repository (Jayant-Goyal/FriendAvailabilityTracker)
+   */
+  async fetchOnlineTimetables(forceRefresh = false) {
+    const listContainer = document.getElementById('timetables-modal-list');
+    if (!listContainer) return;
+
+    listContainer.innerHTML = `
+      <div class="flex flex-col items-center justify-center py-10 text-center space-y-3">
+        <div class="w-7 h-7 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+        <p class="text-xs text-slate-400 font-medium">Fetching timetables from GitHub...</p>
+      </div>
+    `;
+
+    const INDEX_URL = 'https://raw.githubusercontent.com/Jayant-Goyal/FriendAvailabilityTracker/main/timetables.json';
+    const BASE_URL = 'https://raw.githubusercontent.com/Jayant-Goyal/FriendAvailabilityTracker/main/TimeTables/';
+
+    try {
+      const resp = await fetch(INDEX_URL + (forceRefresh ? `?t=${Date.now()}` : ''));
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      const files = Array.isArray(data.files) ? data.files : ['DF.json', 'DG.json', 'DH.json'];
+      this.renderOnlineTimetablesList(files, BASE_URL);
+    } catch (err) {
+      console.warn('Failed to fetch timetables.json index, using fallback:', err);
+      // Fallback default list
+      const fallbackFiles = ['DF.json', 'DG.json', 'DH.json'];
+      this.renderOnlineTimetablesList(fallbackFiles, BASE_URL);
+      this.showToast('Using cached timetable list', 'info');
+    }
+  }
+
+  /**
+   * Render Online Timetables List in Modal
+   */
+  renderOnlineTimetablesList(files, baseUrl) {
+    const listContainer = document.getElementById('timetables-modal-list');
+    if (!listContainer) return;
+
+    const currentSection = this.state.parsedData?.timetableInfo?.section || '';
+
+    let html = '';
+    files.forEach(filename => {
+      const sectionName = filename.replace(/\.json$/i, '');
+      const isActive = currentSection.toUpperCase() === sectionName.toUpperCase();
+
+      html += `
+        <div class="p-3 rounded-2xl border transition-all flex items-center justify-between ${
+          isActive 
+            ? 'bg-blue-950/70 border-blue-500/80 shadow-lg ring-1 ring-blue-500/40' 
+            : 'bg-slate-900/90 border-slate-800 hover:border-slate-700'
+        }">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center font-black text-blue-400 text-sm">
+              ${sectionName}
+            </div>
+            <div>
+              <div class="text-xs font-bold text-white flex items-center gap-1.5">
+                <span>Section ${sectionName}</span>
+                ${isActive ? '<span class="text-[9px] bg-blue-500/20 text-blue-300 font-extrabold px-1.5 py-0.5 rounded border border-blue-500/30">Active</span>' : ''}
+              </div>
+              <div class="text-[10px] text-slate-400 font-medium">JECRC University • ${filename}</div>
+            </div>
+          </div>
+
+          <button 
+            type="button"
+            class="online-load-tt-btn px-3 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center gap-1.5 ${
+              isActive 
+                ? 'bg-blue-600 text-white shadow-md hover:bg-blue-500' 
+                : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
+            }"
+            data-url="${baseUrl}${filename}"
+            data-filename="${filename}"
+            data-section="${sectionName}"
+          >
+            <i data-lucide="${isActive ? 'check' : 'download'}" class="w-3.5 h-3.5"></i>
+            <span>${isActive ? 'Reload' : 'Load'}</span>
+          </button>
+        </div>
+      `;
+    });
+
+    listContainer.innerHTML = html;
+    if (window.lucide) lucide.createIcons({ root: listContainer });
+
+    // Bind click events to load timetable
+    listContainer.querySelectorAll('.online-load-tt-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const url = btn.getAttribute('data-url');
+        const section = btn.getAttribute('data-section');
+        if (!url) return;
+
+        btn.innerHTML = `<div class="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div><span>Loading...</span>`;
+        await this.loadTimetableFromUrl(url, section);
+
+        // Close modal
+        setTimeout(() => {
+          const modal = document.getElementById('timetables-modal');
+          modal?.classList.add('hidden');
+          modal?.classList.remove('flex');
+          document.getElementById('drawer-close-btn')?.click();
+        }, 300);
+      });
+    });
+  }
+
+  /**
+   * Load and Parse Timetable directly from a remote URL
+   */
+  async loadTimetableFromUrl(url, sectionName) {
+    try {
+      this.showToast(`Fetching Section ${sectionName}...`);
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const json = await resp.json();
+
+      this.setTimetableData(json);
+      this.saveCurrentTimetable();
+      this.renderTimetable();
+      this.updateDrawerHeader();
+      this.showToast(`Loaded Section ${sectionName}!`, 'success');
+    } catch (err) {
+      console.error('Failed to load remote timetable:', err);
+      this.showToast(`Failed to load Section ${sectionName}: ${err.message}`, 'error');
     }
   }
 
